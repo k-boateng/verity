@@ -8,7 +8,7 @@ richer bibliography text when the HTML bibliography is missing.
 
 from dataclasses import dataclass, field
 
-from .html import ProcessedHtml
+from .html import ProcessedHtml, normalize_math
 from .latex import LatexInfo
 
 
@@ -49,12 +49,23 @@ def build(processed: ProcessedHtml, latex: LatexInfo | None) -> GraphData:
         )
 
     if latex is not None:
-        _add_symbols(graph, latex)
+        _add_symbols(graph, latex, processed.math_by_section)
 
     return graph
 
 
-def _add_symbols(graph: GraphData, latex: LatexInfo) -> None:
+def _sections_containing(needle: str, math_by_section: dict[str, str]) -> list[str]:
+    """Sections whose math mentions this token — the basis for showing only
+    the notation that's currently on the reader's screen."""
+    norm = normalize_math(needle)
+    if not norm:
+        return []
+    return [anchor for anchor, blob in math_by_section.items() if norm in blob]
+
+
+def _add_symbols(
+    graph: GraphData, latex: LatexInfo, math_by_section: dict[str, str] | None = None
+) -> None:
     """First-cut notation sheet: macro definitions are grounded (the macro
     body is a real definition from the source); repeated math tokens are
     listed but explicitly ungrounded until a definition span is verified —
@@ -74,7 +85,14 @@ def _add_symbols(graph: GraphData, latex: LatexInfo) -> None:
                 "html_anchor": "",
                 "definition_anchor": "",
                 "excerpt": body,
-                "data": {"source": "macro", "grounded": True, "section_label": "preamble"},
+                "data": {
+                    "source": "macro",
+                    "grounded": True,
+                    "section_label": "preamble",
+                    # macros never appear verbatim in rendered math; match
+                    # their expansion instead
+                    "sections": _sections_containing(body, math_by_section or {}),
+                },
             }
         )
         added.add(token)
@@ -90,7 +108,12 @@ def _add_symbols(graph: GraphData, latex: LatexInfo) -> None:
                 "html_anchor": "",
                 "definition_anchor": "",
                 "excerpt": "",  # empty excerpt = "not stated in this paper" (abstention)
-                "data": {"source": "math_scan", "grounded": False, "count": sym["count"]},
+                "data": {
+                    "source": "math_scan",
+                    "grounded": False,
+                    "count": sym["count"],
+                    "sections": _sections_containing(token, math_by_section or {}),
+                },
             }
         )
         added.add(token)

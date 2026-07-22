@@ -50,12 +50,15 @@ class FetchResult:
     html: str
     html_base_url: str  # for resolving relative image srcs
     source_dir: Path | None  # unpacked LaTeX source, None if unavailable
+    title: str = ""
+    authors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
 
 def fetch(arxiv_id: str, dest_dir: Path) -> FetchResult:
     warnings: list[str] = []
     with httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=60.0) as client:
+        title, authors = _fetch_metadata(client, arxiv_id)
         html, base_url = _fetch_html(client, arxiv_id)
         source_dir = None
         try:
@@ -68,8 +71,37 @@ def fetch(arxiv_id: str, dest_dir: Path) -> FetchResult:
         html=html,
         html_base_url=base_url,
         source_dir=source_dir,
+        title=title,
+        authors=authors,
         warnings=warnings,
     )
+
+
+def _fetch_metadata(client: httpx.Client, arxiv_id: str) -> tuple[str, list[str]]:
+    """Clean title and author names from the arXiv metadata API — far more
+    reliable than scraping them out of the rendered author block."""
+    try:
+        resp = _throttled_get(
+            client, f"https://export.arxiv.org/api/query?id_list={arxiv_id}&max_results=1"
+        )
+        if resp.status_code != 200:
+            return "", []
+        import xml.etree.ElementTree as ET
+
+        ns = {"a": "http://www.w3.org/2005/Atom"}
+        root = ET.fromstring(resp.text)
+        entry = root.find("a:entry", ns)
+        if entry is None:
+            return "", []
+        title = re.sub(r"\s+", " ", (entry.findtext("a:title", "", ns) or "")).strip()
+        authors = [
+            name.strip()
+            for author in entry.findall("a:author", ns)
+            if (name := author.findtext("a:name", "", ns))
+        ]
+        return title, authors
+    except Exception:
+        return "", []
 
 
 def _fetch_html(client: httpx.Client, arxiv_id: str) -> tuple[str, str]:

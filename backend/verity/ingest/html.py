@@ -41,6 +41,9 @@ class ProcessedHtml:
     targets: list[Target] = field(default_factory=list)
     occurrences: list[RefOccurrence] = field(default_factory=list)
     image_srcs: list[str] = field(default_factory=list)
+    # section anchor -> concatenated LaTeX (alttext) of the math in it,
+    # normalized for symbol lookup. Powers the context-aware notation sheet.
+    math_by_section: dict[str, str] = field(default_factory=dict)
 
 
 _KIND_BY_CLASS = [
@@ -58,14 +61,15 @@ _KIND_BY_CLASS = [
 ]
 
 
-def process(html: str, safe_id: str) -> ProcessedHtml:
+def process(html: str, safe_id: str, byline: str = "") -> ProcessedHtml:
     soup = BeautifulSoup(html, "lxml")
     article = soup.find("article") or soup.find("body") or soup
 
     title = _text(article.find(class_="ltx_title_document"))
-    authors = _text(article.find(class_="ltx_authors"))
+    authors = byline or _text(article.find(class_="ltx_authors"))
 
     _strip_dangerous(article)
+    _replace_author_block(soup, article, byline)
 
     targets: dict[str, Target] = {}
     occurrences: list[RefOccurrence] = []
@@ -120,6 +124,7 @@ def process(html: str, safe_id: str) -> ProcessedHtml:
                 targets[anchor] = target
 
     image_srcs = _rewrite_images(article, safe_id)
+    math_by_section = _index_math(article)
 
     return ProcessedHtml(
         title=title,
@@ -128,7 +133,40 @@ def process(html: str, safe_id: str) -> ProcessedHtml:
         targets=list(targets.values()),
         occurrences=occurrences,
         image_srcs=image_srcs,
+        math_by_section=math_by_section,
     )
+
+
+def _replace_author_block(soup: BeautifulSoup, article: Tag, byline: str) -> None:
+    """The LaTeXML author block leaks raw \\author separators and inlines
+    contribution footnotes — an unreadable wall. Swap it for a clean byline."""
+    blocks = article.find_all(class_="ltx_authors")
+    if not blocks:
+        return
+    if byline:
+        replacement = soup.new_tag("div")
+        replacement["class"] = "verity-byline"
+        replacement.string = byline
+        blocks[0].replace_with(replacement)
+        blocks = blocks[1:]
+    for extra in blocks:
+        extra.decompose()
+
+
+def normalize_math(text: str) -> str:
+    """Normalize LaTeX for symbol lookup: d_{k} and d_k must compare equal."""
+    return re.sub(r"[\s{}]", "", text)
+
+
+def _index_math(article: Tag) -> dict[str, str]:
+    index: dict[str, list[str]] = {}
+    for math in article.find_all("math"):
+        alt = math.get("alttext", "")
+        if not alt:
+            continue
+        section = _enclosing_section_anchor(math)
+        index.setdefault(section, []).append(alt)
+    return {anchor: normalize_math(" ".join(parts)) for anchor, parts in index.items()}
 
 
 def _strip_dangerous(article: Tag) -> None:

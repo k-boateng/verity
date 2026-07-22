@@ -6,6 +6,7 @@ interface Props {
   html: string;
   nodes: GraphNode[];
   onJump: (node: GraphNode) => void;
+  onVisibleSectionsChange?: (visible: Set<string>) => void;
 }
 
 interface HoverState {
@@ -13,10 +14,13 @@ interface HoverState {
   element: Element;
 }
 
-const OPEN_DELAY_MS = 150;
-const CLOSE_DELAY_MS = 250;
+// The hover mechanic: rest ~120ms on a dotted object to open; the card
+// stays while the pointer is over the object or the card, with a 300ms
+// grace period to cross the gap; Esc or moving away closes; click dives.
+const OPEN_DELAY_MS = 120;
+const CLOSE_DELAY_MS = 300;
 
-export default function PaperView({ html, nodes, onJump }: Props) {
+export default function PaperView({ html, nodes, onJump, onVisibleSectionsChange }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<HoverState | null>(null);
   const openTimer = useRef<number | undefined>(undefined);
@@ -101,6 +105,51 @@ export default function PaperView({ html, nodes, onJump }: Props) {
       container.removeEventListener("focusin", onFocusIn);
     };
   }, [nodeByAnchor, onJump, scheduleClose]);
+
+  // Track which sections are on screen so the notation sheet can show only
+  // the symbols the reader is actually looking at. Plain rect checks on
+  // scroll (plus a slow polling fallback for environments that suppress
+  // scroll events) — IntersectionObserver is unreliable in throttled or
+  // embedded renderers.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !onVisibleSectionsChange) return;
+    const sections = Array.from(container.querySelectorAll<HTMLElement>("section[id]"));
+    if (sections.length === 0) return;
+
+    let lastKey = "";
+    const compute = () => {
+      const margin = 120;
+      const vh = window.innerHeight;
+      const visible = new Set<string>();
+      for (const s of sections) {
+        const r = s.getBoundingClientRect();
+        if (r.bottom > -margin && r.top < vh + margin) visible.add(s.id);
+      }
+      const key = [...visible].sort().join(",");
+      if (key !== lastKey) {
+        lastKey = key;
+        onVisibleSectionsChange(visible);
+      }
+    };
+
+    compute();
+    let lastY = window.scrollY;
+    const onScroll = () => compute();
+    const poll = window.setInterval(() => {
+      if (window.scrollY !== lastY) {
+        lastY = window.scrollY;
+        compute();
+      }
+    }, 500);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.clearInterval(poll);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [html, onVisibleSectionsChange]);
 
   return (
     <div className="paper-container">

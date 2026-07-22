@@ -9,14 +9,14 @@ class IngestError(Exception):
     pass
 
 
-def ingest(session: Session, raw_id: str) -> Document:
+def ingest(session: Session, raw_id: str, force: bool = False) -> Document:
     try:
         arxiv_id = arxiv.normalize_arxiv_id(raw_id)
     except arxiv.FetchError as exc:
         raise IngestError(str(exc)) from exc
 
     doc = session.query(Document).filter_by(arxiv_id=arxiv_id).one_or_none()
-    if doc is not None and doc.status == "ready":
+    if doc is not None and doc.status == "ready" and not force:
         return doc
     if doc is None:
         doc = Document(arxiv_id=arxiv_id, status="fetched")
@@ -55,8 +55,9 @@ def _run(session: Session, doc: Document) -> None:
                     pass
             latex_info = latex_mod.parse(tex)
 
-    processed = html_mod.process(fetched.html, safe_id)
-    doc.title = processed.title or doc.arxiv_id
+    byline = ", ".join(fetched.authors)
+    processed = html_mod.process(fetched.html, safe_id, byline=byline)
+    doc.title = fetched.title or processed.title or doc.arxiv_id
     doc.authors = processed.authors
     doc.status = "parsed"
     session.commit()

@@ -230,7 +230,8 @@ def parse_symbols(tex: str, min_count: int = 3, limit: int = 40) -> list[dict]:
     for m in MATH_REGION_RE.finditer(tex):
         region = next(g for g in m.groups() if g is not None)
         for tok_m in SYMBOL_TOKEN_RE.finditer(region):
-            tok = tok_m.group(0)
+            # normalize braces away: d_{k}, d_k and a stray d_k} are one token
+            tok = tok_m.group(0).replace("{", "").replace("}", "")
             # require a subscript/superscript OR a Greek letter OR uppercase:
             # bare lowercase single letters are too noisy
             if "_" in tok or "^" in tok or tok.startswith("\\") or (len(tok) == 1 and tok.isupper()):

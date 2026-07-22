@@ -14,12 +14,13 @@ def main(argv: list[str] | None = None) -> int:
     p_ingest = sub.add_parser("ingest", help="Ingest an arXiv paper by id or URL")
     p_ingest.add_argument("arxiv_id")
     p_ingest.add_argument("--json", dest="json_out", help="Write the graph to a JSON file")
+    p_ingest.add_argument("--force", action="store_true", help="Re-ingest even if already ready")
     args = parser.parse_args(argv)
 
     db.init_db()
     session = db.get_session()
     try:
-        doc = ingest(session, args.arxiv_id)
+        doc = ingest(session, args.arxiv_id, force=args.force)
     except IngestError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

@@ -223,15 +223,24 @@ a {
 
 .reader-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  gap: 40px;
+  grid-template-columns: minmax(0, 1fr);
   max-width: 1160px;
   margin: 0 auto;
   padding: 36px 28px 120px;
 }
 
+.reader-layout .paper-container {
+  justify-self: center;
+  min-width: 0;
+}
+
+.reader-layout.with-notation {
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 40px;
+}
+
 @media (max-width: 900px) {
-  .reader-layout {
+  .reader-layout.with-notation {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -339,7 +348,8 @@ a {
 
 .notation-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
 }
 
@@ -348,15 +358,51 @@ a {
   letter-spacing: 0.13em;
   text-transform: uppercase;
   color: var(--muted);
-  margin: 0 0 4px;
+  margin: 0;
 }
 
-.notation-toggle {
-  border: none;
-  background: none;
+.notation-toggle-btn {
+  flex: none;
+  border: 1px solid var(--hairline);
+  background: var(--ground);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 4px 12px;
+}
+
+.notation-toggle-btn.active {
+  background: var(--link-soft);
+  border-color: var(--link);
   color: var(--link);
-  font-size: 0.72rem;
-  padding: 0;
+}
+
+.notation-scope {
+  display: inline-flex;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.notation-scope button {
+  border: none;
+  background: var(--ground);
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 3px 10px;
+}
+
+.notation-scope button.active {
+  background: var(--link-soft);
+  color: var(--link);
+}
+
+.notation-empty {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: 12px 0 0;
 }
 
 .notation-sheet ul {

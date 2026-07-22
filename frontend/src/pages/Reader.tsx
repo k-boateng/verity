@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { GraphNode } from "../api";
 import { api } from "../api";
@@ -10,6 +11,8 @@ import { useDepthTrail } from "../reader/useDepthTrail";
 export default function Reader() {
   const { docId } = useParams<{ docId: string }>();
   const { trail, dive, popBack } = useDepthTrail();
+  const [notationOpen, setNotationOpen] = useState(false);
+  const [visibleSections, setVisibleSections] = useState<Set<string>>(new Set());
 
   const doc = useQuery({
     queryKey: ["document", docId],
@@ -26,6 +29,11 @@ export default function Reader() {
     queryFn: () => api.getGraph(docId!),
     enabled: Boolean(docId),
   });
+
+  const symbolCount = useMemo(
+    () => graph.data?.nodes.filter((n) => n.kind === "symbol").length ?? 0,
+    [graph.data],
+  );
 
   const handleJump = (node: GraphNode) => {
     const anchor = node.definition_anchor || node.html_anchor;
@@ -53,10 +61,31 @@ export default function Reader() {
           Verity
         </Link>
         <Breadcrumb title={doc.data.title} trail={trail} onPopBack={popBack} />
+        {symbolCount > 0 && (
+          <button
+            type="button"
+            className={`notation-toggle-btn ${notationOpen ? "active" : ""}`}
+            onClick={() => setNotationOpen(!notationOpen)}
+            aria-pressed={notationOpen}
+          >
+            Notation
+          </button>
+        )}
       </nav>
-      <div className="reader-layout">
-        <PaperView html={html.data} nodes={graph.data.nodes} onJump={handleJump} />
-        <NotationSheet nodes={graph.data.nodes} onJumpTo={handleJump} />
+      <div className={`reader-layout ${notationOpen ? "with-notation" : ""}`}>
+        <PaperView
+          html={html.data}
+          nodes={graph.data.nodes}
+          onJump={handleJump}
+          onVisibleSectionsChange={setVisibleSections}
+        />
+        {notationOpen && (
+          <NotationSheet
+            nodes={graph.data.nodes}
+            visibleSections={visibleSections}
+            onJumpTo={handleJump}
+          />
+        )}
       </div>
     </div>
   );

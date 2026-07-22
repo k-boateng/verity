@@ -30,6 +30,7 @@ export interface GraphNode {
     grounded?: boolean;
     source?: string;
     count?: number;
+    sections?: string[];
   };
 }
 

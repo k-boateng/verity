@@ -1,6 +1,6 @@
 from verity.ingest import graph, html, latex
 
-SAMPLE_HTML = """
+SAMPLE_HTML = r"""
 <html><body><article class="ltx_document">
 <h1 class="ltx_title ltx_title_document">A Sample Paper</h1>
 <div class="ltx_authors">Ada Lovelace</div>
@@ -15,7 +15,7 @@ SAMPLE_HTML = """
 <section id="S2" class="ltx_section">
   <h2 class="ltx_title ltx_title_section"><span class="ltx_tag ltx_tag_section">2 </span>Method</h2>
   <table id="S2.E1" class="ltx_equation">
-    <tr><td><math alttext="A = QK^T" id="S2.E1.m1"><mi>A</mi></math></td>
+    <tr><td><math alttext="A = QK^{T} / \sqrt{d_{k}}" id="S2.E1.m1"><mi>A</mi></math></td>
     <td><span class="ltx_tag ltx_tag_equation">(1)</span></td></tr>
   </table>
   <div class="ltx_para"><p class="ltx_p"><img src="x1.png"/></p></div>
@@ -40,7 +40,7 @@ def test_process_builds_targets_and_occurrences():
 
     by_anchor = {t.anchor: t for t in processed.targets}
     assert by_anchor["S2.E1"].kind == "equation"
-    assert "A = QK^T" in by_anchor["S2.E1"].excerpt_text
+    assert "A = QK^{T}" in by_anchor["S2.E1"].excerpt_text
     assert by_anchor["bib.bib1"].kind == "citation"
     assert "Vaswani" in by_anchor["bib.bib1"].excerpt_text
     assert by_anchor["bib.bib1"].section_label == "References"
@@ -55,6 +55,20 @@ def test_process_builds_targets_and_occurrences():
     assert ("bib.bib1", "cites") in kinds
     # both occurrences originate in section S1
     assert all(o.section_anchor == "S1" for o in processed.occurrences)
+
+
+def test_byline_replaces_author_block():
+    processed = html.process(SAMPLE_HTML, "1234.5678", byline="Ada Lovelace, Charles Babbage")
+    assert processed.authors == "Ada Lovelace, Charles Babbage"
+    assert "verity-byline" in processed.article_html
+    assert 'class="ltx_authors"' not in processed.article_html
+
+
+def test_math_index_by_section():
+    processed = html.process(SAMPLE_HTML, "1234.5678")
+    assert "S2" in processed.math_by_section
+    # normalized: braces and whitespace removed
+    assert "d_k" in processed.math_by_section["S2"]
 
 
 def test_process_stamps_and_sanitizes():
@@ -85,6 +99,8 @@ def test_graph_merges_symbols_with_abstention():
     # scanned token is listed but ungrounded (abstention state)
     assert by_label["d_k"]["excerpt"] == ""
     assert by_label["d_k"]["data"]["grounded"] is False
+    # context-awareness: d_k appears in section S2's math
+    assert by_label["d_k"]["data"]["sections"] == ["S2"]
 
     edge_kinds = {e["kind"] for e in g.edges}
     assert edge_kinds == {"references", "cites"}

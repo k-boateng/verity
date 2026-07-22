@@ -3,18 +3,20 @@ import type { GraphNode } from "../api";
 
 interface Props {
   nodes: GraphNode[];
+  visibleSections: Set<string>;
   onJumpTo: (node: GraphNode) => void;
 }
 
-export default function NotationSheet({ nodes, onJumpTo }: Props) {
-  const [open, setOpen] = useState(true);
+type Scope = "in-view" | "all";
+
+export default function NotationSheet({ nodes, visibleSections, onJumpTo }: Props) {
+  const [scope, setScope] = useState<Scope>("in-view");
 
   const symbols = useMemo(
     () =>
       nodes
         .filter((n) => n.kind === "symbol")
         .sort((a, b) => {
-          // grounded entries first, then by frequency
           const ga = a.data.grounded ? 0 : 1;
           const gb = b.data.grounded ? 0 : 1;
           if (ga !== gb) return ga - gb;
@@ -23,24 +25,46 @@ export default function NotationSheet({ nodes, onJumpTo }: Props) {
     [nodes],
   );
 
+  const shown = useMemo(() => {
+    if (scope === "all") return symbols;
+    return symbols.filter((s) => {
+      const sections = s.data.sections;
+      // legacy graphs without location data: never hide silently
+      if (sections === undefined) return true;
+      return sections.some((anchor) => visibleSections.has(anchor));
+    });
+  }, [symbols, scope, visibleSections]);
+
   if (symbols.length === 0) return null;
 
   return (
-    <aside className={`notation-sheet ${open ? "" : "collapsed"}`}>
+    <aside className="notation-sheet">
       <div className="notation-head">
         <h3>Notation</h3>
-        <button
-          type="button"
-          className="notation-toggle"
-          onClick={() => setOpen(!open)}
-          aria-expanded={open}
-        >
-          {open ? "hide" : "show"}
-        </button>
+        <div className="notation-scope" role="group" aria-label="Notation scope">
+          <button
+            type="button"
+            className={scope === "in-view" ? "active" : ""}
+            onClick={() => setScope("in-view")}
+            aria-pressed={scope === "in-view"}
+          >
+            In view
+          </button>
+          <button
+            type="button"
+            className={scope === "all" ? "active" : ""}
+            onClick={() => setScope("all")}
+            aria-pressed={scope === "all"}
+          >
+            All
+          </button>
+        </div>
       </div>
-      {open && (
+      {shown.length === 0 ? (
+        <p className="notation-empty">No notation in the sections on screen.</p>
+      ) : (
         <ul>
-          {symbols.map((s) => (
+          {shown.map((s) => (
             <li key={s.id} className="notation-entry">
               <code className="notation-token">{s.label}</code>
               {s.excerpt ? (
