@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import type { ChatThread } from "./ChatDock";
+import type { ChatSummary } from "../api";
 
 interface Props {
-  threads: ChatThread[];
-  activeId: string | null;
-  onOpen: (id: string) => void;
+  chats: ChatSummary[];
+  activeId: number | null;
+  onOpen: (id: number) => void;
 }
 
-/** A small reopener for chats started this session — the permanence that
- * keeps a stray click from losing a conversation. */
-export default function ConversationsMenu({ threads, activeId, onOpen }: Props) {
+/** Reopener for saved conversations on this paper — the permanence that
+ * keeps a stray click (or a reload) from losing a thread. */
+export default function ConversationsMenu({ chats, activeId, onOpen }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -29,23 +29,25 @@ export default function ConversationsMenu({ threads, activeId, onOpen }: Props) 
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
-        Chats ({threads.length})
+        Chats ({chats.length})
       </button>
       {open && (
         <ul className="conversations-menu">
-          {threads.map((t) => (
-            <li key={t.id}>
+          {chats.map((c) => (
+            <li key={c.id}>
               <button
                 type="button"
-                className={t.id === activeId ? "active" : ""}
+                className={c.id === activeId ? "active" : ""}
                 onClick={() => {
-                  onOpen(t.id);
+                  onOpen(c.id);
                   setOpen(false);
                 }}
               >
-                <span className="conv-quote">“{t.seed.selection.slice(0, 40)}{t.seed.selection.length > 40 ? "…" : ""}”</span>
+                <span className="conv-quote">
+                  “{c.selection.slice(0, 40)}{c.selection.length > 40 ? "…" : ""}”
+                </span>
                 <span className="conv-meta">
-                  {t.seed.section || "—"} · {t.messages.filter((m) => m.role === "user").length} Q
+                  {c.section_label || "—"} · {c.question_count} Q
                 </span>
               </button>
             </li>

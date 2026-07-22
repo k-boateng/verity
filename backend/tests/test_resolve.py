@@ -115,3 +115,47 @@ def test_config_endpoint_reports_provider(client):
     assert client.get("/api/config").json()["llm_configured"] is True
     llm.set_provider(FakeProvider(configured=False))
     assert client.get("/api/config").json()["llm_configured"] is False
+
+
+def test_chat_persists_and_reopens(client, doc):
+    llm.set_provider(FakeProvider(reply="Because scaling keeps gradients stable."))
+
+    # open a thread for a passage
+    created = client.post(
+        f"/api/documents/{doc}/chats",
+        json={"selection": "row-stochastic", "section_label": "§3", "section_anchor": "S3",
+              "paragraph": "...", "dependencies": []},
+    ).json()
+    chat_id = created["id"]
+    assert created["messages"] == []
+
+    # reopening the same passage returns the same thread, not a duplicate
+    again = client.post(
+        f"/api/documents/{doc}/chats",
+        json={"selection": "row-stochastic", "section_anchor": "S3"},
+    ).json()
+    assert again["id"] == chat_id
+
+    # send a message; both sides get persisted server-side
+    resp = client.post(f"/api/chats/{chat_id}/message", json={"content": "why?"})
+    assert resp.status_code == 200
+    assert "gradients stable" in resp.text
+
+    fetched = client.get(f"/api/chats/{chat_id}").json()
+    roles = [m["role"] for m in fetched["messages"]]
+    assert roles == ["user", "assistant"]
+    assert fetched["messages"][0]["content"] == "why?"
+    assert "gradients stable" in fetched["messages"][1]["content"]
+
+    # it shows up in the document's chat list with a question count
+    listed = client.get(f"/api/documents/{doc}/chats").json()
+    assert any(c["id"] == chat_id and c["question_count"] == 1 for c in listed)
+
+
+def test_chat_message_requires_model(client, doc):
+    llm.set_provider(FakeProvider(configured=False))
+    created = client.post(
+        f"/api/documents/{doc}/chats", json={"selection": "x", "section_anchor": "S1"}
+    ).json()
+    resp = client.post(f"/api/chats/{created['id']}/message", json={"content": "hi"})
+    assert resp.status_code == 409

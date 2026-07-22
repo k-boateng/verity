@@ -94,15 +94,28 @@ export const api = {
       body: JSON.stringify(req),
     }).then((r) => handle<ResolveResult>(r)),
 
-  chatStream: async function* (
-    docId: string | number,
-    req: ChatRequest,
-    signal?: AbortSignal,
-  ): AsyncGenerator<string> {
-    const resp = await fetch(`/api/documents/${docId}/chat`, {
+  listChats: (docId: string | number) =>
+    fetch(`/api/documents/${docId}/chats`).then((r) => handle<ChatSummary[]>(r)),
+
+  openChat: (docId: string | number, seed: ChatCreateRequest) =>
+    fetch(`/api/documents/${docId}/chats`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(req),
+      body: JSON.stringify(seed),
+    }).then((r) => handle<Chat>(r)),
+
+  getChat: (chatId: number) =>
+    fetch(`/api/chats/${chatId}`).then((r) => handle<Chat>(r)),
+
+  sendChatMessage: async function* (
+    chatId: number,
+    content: string,
+    signal?: AbortSignal,
+  ): AsyncGenerator<string> {
+    const resp = await fetch(`/api/chats/${chatId}/message`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
       signal,
     });
     if (!resp.ok || !resp.body) throw new Error(`chat failed (${resp.status})`);
@@ -115,6 +128,39 @@ export const api = {
     }
   },
 };
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatCreateRequest {
+  selection: string;
+  section_label?: string;
+  section_anchor?: string;
+  paragraph?: string;
+  dependencies?: string[];
+}
+
+export interface ChatSummary {
+  id: number;
+  selection: string;
+  section_label: string;
+  section_anchor: string;
+  question_count: number;
+  updated_at: string | null;
+}
+
+export interface Chat {
+  id: number;
+  document_id: number;
+  selection: string;
+  section_label: string;
+  section_anchor: string;
+  paragraph: string;
+  dependencies: string[];
+  messages: ChatMessage[];
+}
 
 export interface ResolveRequest {
   selection: string;
@@ -137,12 +183,4 @@ export interface ResolveResult {
   anchor: string;
   section_label?: string;
   model?: string;
-}
-
-export interface ChatRequest {
-  messages: { role: "user" | "assistant"; content: string }[];
-  paragraph?: string;
-  selection?: string;
-  section?: string;
-  dependencies?: string[];
 }

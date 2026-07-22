@@ -27,6 +27,7 @@ class Document(Base):
 
     nodes: Mapped[list["Node"]] = relationship(back_populates="document", cascade="all, delete-orphan")
     edges: Mapped[list["Edge"]] = relationship(back_populates="document", cascade="all, delete-orphan")
+    chats: Mapped[list["Chat"]] = relationship(back_populates="document", cascade="all, delete-orphan")
 
 
 class Node(Base):
@@ -63,3 +64,24 @@ class Edge(Base):
     kind: Mapped[str] = mapped_column(String(16))
 
     document: Mapped[Document] = relationship(back_populates="edges")
+
+
+class Chat(Base):
+    """An anchored conversation. The server owns the message history so a
+    thread survives reloads and can be reopened whenever the reader returns
+    to the paper. Messages are a JSON list of {role, content}."""
+
+    __tablename__ = "chats"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"), index=True)
+    selection: Mapped[str] = mapped_column(Text, default="")
+    section_label: Mapped[str] = mapped_column(Text, default="")
+    section_anchor: Mapped[str] = mapped_column(String(255), default="")
+    paragraph: Mapped[str] = mapped_column(Text, default="")
+    dependencies: Mapped[list] = mapped_column(JSON, default=list)
+    messages: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    document: Mapped[Document] = relationship(back_populates="chats")

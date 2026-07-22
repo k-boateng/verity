@@ -10,7 +10,7 @@ from . import config, db, retrieval
 from .ingest import IngestError, ingest
 from .llm import get_provider
 from .llm import tasks as llm_tasks
-from .models import Document, Edge, Node
+from .models import Chat, Document, Edge, Node, utcnow
 
 
 @asynccontextmanager
@@ -211,61 +211,189 @@ def resolve_selection(doc_id: int, req: ResolveRequest) -> dict:
     }
 
 
-class ChatRequest(BaseModel):
-    messages: list[dict]  # [{role: "user"|"assistant", content: str}]
+# --- Anchored chat (persisted server-side) --------------------------------
+
+_CHAT_SYSTEM = (
+    "You are Verity, embedded in a scientific paper, having a short focused "
+    "conversation anchored to a specific passage. Answer the reader's questions "
+    "clearly and helpfully, drawing on BOTH the anchored context and your general "
+    "knowledge of the field. Ground any claim about what THIS paper specifically "
+    "does, defines, or reports in the provided context; but for concepts, "
+    "background, and 'why' questions, use standard knowledge of the field — do "
+    "NOT refuse just because the anchored passage doesn't restate the answer. The "
+    "passage is context, not a limit on what you may explain. Be concise. Write in "
+    "plain prose — no markdown bold, headers, or bullet lists — but write any math "
+    "in LaTeX: inline as $...$ and display equations as $$...$$."
+)
+
+
+def _build_chat_prompt(title: str, chat: Chat, messages: list[dict]) -> str:
+    seed = (
+        f'Paper: "{title}"\nSection: {chat.section_label or "unknown"}\n\n'
+        f"Anchored paragraph:\n\"\"\"\n{(chat.paragraph or '').strip()}\n\"\"\"\n\n"
+    )
+    if chat.selection.strip():
+        seed += f'The reader first highlighted: "{chat.selection.strip()}"\n\n'
+    deps = chat.dependencies or []
+    if deps:
+        seed += "Nearby resolved references:\n" + "\n".join(f"- {d}" for d in deps[:12]) + "\n\n"
+    transcript = seed + "Conversation so far:\n"
+    for m in messages:
+        who = "Reader" if m.get("role") == "user" else "Verity"
+        transcript += f"{who}: {m.get('content', '').strip()}\n"
+    return transcript + "Verity:"
+
+
+def _chat_summary(chat: Chat) -> dict:
+    msgs = chat.messages or []
+    return {
+        "id": chat.id,
+        "selection": chat.selection,
+        "section_label": chat.section_label,
+        "section_anchor": chat.section_anchor,
+        "question_count": sum(1 for m in msgs if m.get("role") == "user"),
+        "updated_at": chat.updated_at.isoformat() if chat.updated_at else None,
+    }
+
+
+def _chat_full(chat: Chat) -> dict:
+    return {
+        "id": chat.id,
+        "document_id": chat.document_id,
+        "selection": chat.selection,
+        "section_label": chat.section_label,
+        "section_anchor": chat.section_anchor,
+        "paragraph": chat.paragraph,
+        "dependencies": chat.dependencies or [],
+        "messages": chat.messages or [],
+    }
+
+
+class ChatCreateRequest(BaseModel):
+    selection: str
+    section_label: str = ""
+    section_anchor: str = ""
     paragraph: str = ""
-    selection: str = ""
-    section: str = ""
     dependencies: list[str] = []
 
 
-@app.post("/api/documents/{doc_id}/chat")
-def chat(doc_id: int, req: ChatRequest):
-    """Anchored chat — the escape hatch. Streams a reply seeded warm with the
-    paragraph, the selection, and the resolved dependencies."""
+@app.get("/api/documents/{doc_id}/chats")
+def list_chats(doc_id: int) -> list[dict]:
+    session = db.get_session()
+    try:
+        _get_doc(session, doc_id)
+        chats = (
+            session.query(Chat)
+            .filter_by(document_id=doc_id)
+            .order_by(Chat.updated_at.desc())
+            .all()
+        )
+        return [_chat_summary(c) for c in chats]
+    finally:
+        session.close()
+
+
+@app.post("/api/documents/{doc_id}/chats")
+def create_or_open_chat(doc_id: int, req: ChatCreateRequest) -> dict:
+    """Open the existing conversation for this passage if there is one,
+    otherwise start a fresh thread. Keyed by (document, selection, section)."""
+    session = db.get_session()
+    try:
+        _get_doc(session, doc_id)
+        existing = (
+            session.query(Chat)
+            .filter_by(
+                document_id=doc_id,
+                selection=req.selection,
+                section_anchor=req.section_anchor,
+            )
+            .one_or_none()
+        )
+        if existing is not None:
+            return _chat_full(existing)
+        chat = Chat(
+            document_id=doc_id,
+            selection=req.selection,
+            section_label=req.section_label,
+            section_anchor=req.section_anchor,
+            paragraph=req.paragraph,
+            dependencies=req.dependencies,
+            messages=[],
+        )
+        session.add(chat)
+        session.commit()
+        return _chat_full(chat)
+    finally:
+        session.close()
+
+
+@app.get("/api/chats/{chat_id}")
+def get_chat(chat_id: int) -> dict:
+    session = db.get_session()
+    try:
+        chat = session.get(Chat, chat_id)
+        if chat is None:
+            raise HTTPException(status_code=404, detail="chat not found")
+        return _chat_full(chat)
+    finally:
+        session.close()
+
+
+class ChatMessageRequest(BaseModel):
+    content: str
+
+
+@app.post("/api/chats/{chat_id}/message")
+def send_chat_message(chat_id: int, req: ChatMessageRequest):
+    """Append the reader's message, then stream the reply. The server persists
+    both sides, so the thread is durable and reopenable."""
     provider = get_provider()
     if not provider.is_configured():
         raise HTTPException(status_code=409, detail="no model configured")
 
+    content = req.content.strip()
+    if not content:
+        raise HTTPException(status_code=422, detail="empty message")
+
     session = db.get_session()
     try:
-        doc = _get_doc(session, doc_id)
-        title = doc.title
+        chat = session.get(Chat, chat_id)
+        if chat is None:
+            raise HTTPException(status_code=404, detail="chat not found")
+        doc = session.get(Document, chat.document_id)
+        title = doc.title if doc else ""
+        messages = list(chat.messages or [])
+        messages.append({"role": "user", "content": content})
+        chat.messages = messages
+        chat.updated_at = utcnow()
+        session.commit()
+        transcript = _build_chat_prompt(title, chat, messages)
     finally:
         session.close()
 
-    system = (
-        "You are Verity, embedded in a scientific paper, having a short focused "
-        "conversation anchored to a specific passage. Answer the reader's questions "
-        "clearly and helpfully, drawing on BOTH the anchored context and your general "
-        "knowledge of the field. Ground any claim about what THIS paper specifically "
-        "does, defines, or reports in the provided context; but for concepts, "
-        "background, and 'why' questions, use standard knowledge of the field — do "
-        "NOT refuse just because the anchored passage doesn't restate the answer. The "
-        "passage is context, not a limit on what you may explain. Be concise. Write in "
-        "plain prose — no markdown bold, headers, or bullet lists — but write any math "
-        "in LaTeX: inline as $...$ and display equations as $$...$$."
-    )
-    seed = (
-        f'Paper: "{title}"\nSection: {req.section or "unknown"}\n\n'
-        f"Anchored paragraph:\n\"\"\"\n{req.paragraph.strip()}\n\"\"\"\n\n"
-    )
-    if req.selection.strip():
-        seed += f'The reader first highlighted: "{req.selection.strip()}"\n\n'
-    if req.dependencies:
-        seed += "Nearby resolved references:\n" + "\n".join(f"- {d}" for d in req.dependencies[:12]) + "\n\n"
-
-    transcript = seed + "Conversation so far:\n"
-    for m in req.messages:
-        who = "Reader" if m.get("role") == "user" else "Verity"
-        transcript += f"{who}: {m.get('content', '').strip()}\n"
-    transcript += "Verity:"
-
+    # The generator runs after this function returns, so it can't use the
+    # request-scoped session; it opens its own to persist the reply.
     def token_stream():
+        acc = ""
         try:
-            for piece in provider.stream(system, transcript, max_tokens=900):
+            for piece in provider.stream(_CHAT_SYSTEM, transcript, max_tokens=900):
+                acc += piece
                 yield piece
-        except Exception as exc:  # surface cleanly, don't hang or dump raw errors
-            yield "\n\n" + _friendly_error(exc)
+        except Exception as exc:
+            fallback = "\n\n" + _friendly_error(exc)
+            acc += fallback
+            yield fallback
+        finally:
+            s = db.get_session()
+            try:
+                c = s.get(Chat, chat_id)
+                if c is not None:
+                    msgs = list(c.messages or [])
+                    msgs.append({"role": "assistant", "content": acc})
+                    c.messages = msgs
+                    c.updated_at = utcnow()
+                    s.commit()
+            finally:
+                s.close()
 
     return StreamingResponse(token_stream(), media_type="text/plain; charset=utf-8")

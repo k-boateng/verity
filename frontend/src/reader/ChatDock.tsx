@@ -1,11 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import type { Chat, ChatMessage } from "../api";
 import { api } from "../api";
 import RichText from "./RichText";
-
-export interface ChatMsg {
-  role: "user" | "assistant";
-  content: string;
-}
 
 export interface ChatSeed {
   paragraph: string;
@@ -15,29 +11,23 @@ export interface ChatSeed {
   dependencies: string[];
 }
 
-export interface ChatThread {
-  id: string;
-  seed: ChatSeed;
-  messages: ChatMsg[];
-}
-
 interface Props {
-  docId: string;
-  thread: ChatThread;
-  onMessages: (messages: ChatMsg[]) => void;
+  chat: Chat;
+  onMessages: (messages: ChatMessage[]) => void;
+  onActivity: () => void; // refresh the conversations list after a turn
   onClose: () => void;
-  onJumpToPassage: (thread: ChatThread) => void;
+  onJumpToPassage: (chat: Chat) => void;
 }
 
 /** The escape-hatch conversation. Docked (stable, roomy), sticky (only ✕
- * closes it — never a stray click), and its messages live in the parent so
- * the thread survives being closed and can be reopened. */
-export default function ChatDock({ docId, thread, onMessages, onClose, onJumpToPassage }: Props) {
+ * closes it — never a stray click). The message history lives on the server,
+ * so the thread is durable and reopenable. */
+export default function ChatDock({ chat, onMessages, onActivity, onClose, onJumpToPassage }: Props) {
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const messages = thread.messages;
+  const messages = chat.messages;
 
   const grow = () => {
     const ta = textareaRef.current;
@@ -54,7 +44,7 @@ export default function ChatDock({ docId, thread, onMessages, onClose, onJumpToP
   const send = async () => {
     const text = input.trim();
     if (!text || streaming) return;
-    const base: ChatMsg[] = [...messages, { role: "user", content: text }];
+    const base: ChatMessage[] = [...messages, { role: "user", content: text }];
     onMessages(base);
     setInput("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
@@ -62,13 +52,7 @@ export default function ChatDock({ docId, thread, onMessages, onClose, onJumpToP
     try {
       let acc = "";
       onMessages([...base, { role: "assistant", content: "" }]);
-      for await (const piece of api.chatStream(docId, {
-        messages: base,
-        paragraph: thread.seed.paragraph,
-        selection: thread.seed.selection,
-        section: thread.seed.section,
-        dependencies: thread.seed.dependencies,
-      })) {
+      for await (const piece of api.sendChatMessage(chat.id, text)) {
         acc += piece;
         onMessages([...base, { role: "assistant", content: acc }]);
       }
@@ -76,6 +60,7 @@ export default function ChatDock({ docId, thread, onMessages, onClose, onJumpToP
       onMessages([...base, { role: "assistant", content: `[${(err as Error).message}]` }]);
     } finally {
       setStreaming(false);
+      onActivity();
     }
   };
 
@@ -87,10 +72,10 @@ export default function ChatDock({ docId, thread, onMessages, onClose, onJumpToP
           type="button"
           className="chat-anchor"
           title="Jump to the passage this is anchored to"
-          onClick={() => onJumpToPassage(thread)}
+          onClick={() => onJumpToPassage(chat)}
         >
-          on “{thread.seed.selection.slice(0, 44)}
-          {thread.seed.selection.length > 44 ? "…" : ""}”
+          on “{chat.selection.slice(0, 44)}
+          {chat.selection.length > 44 ? "…" : ""}”
         </button>
         <button type="button" className="chat-close" onClick={onClose} aria-label="Close chat">
           ✕
@@ -100,7 +85,7 @@ export default function ChatDock({ docId, thread, onMessages, onClose, onJumpToP
         {messages.length === 0 && (
           <p className="chat-hint">
             This conversation is pinned to the passage and already knows its context. Ask a
-            follow-up — it stays open until you close it.
+            follow-up — it stays open until you close it, and it’s saved so you can reopen it later.
           </p>
         )}
         {messages.map((m, i) => (
