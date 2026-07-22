@@ -4,6 +4,9 @@ import { Link, useParams } from "react-router-dom";
 import type { GraphNode } from "../api";
 import { api } from "../api";
 import Breadcrumb from "../reader/Breadcrumb";
+import ChatDock from "../reader/ChatDock";
+import type { ChatMsg, ChatSeed, ChatThread } from "../reader/ChatDock";
+import ConversationsMenu from "../reader/ConversationsMenu";
 import NotationSheet from "../reader/NotationSheet";
 import PaperView from "../reader/PaperView";
 import SelectionLayer from "../reader/SelectionLayer";
@@ -16,6 +19,11 @@ export default function Reader() {
   const [notationOpen, setNotationOpen] = useState(false);
   const [visibleSections, setVisibleSections] = useState<Set<string>>(new Set());
   const { snapshot, clear } = useSelection();
+
+  // Chat threads live here (not in the transient selection layer) so they
+  // survive a stray click and can be reopened for the rest of the session.
+  const [threads, setThreads] = useState<ChatThread[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
 
   const cfg = useQuery({ queryKey: ["config"], queryFn: api.getConfig });
 
@@ -49,6 +57,25 @@ export default function Reader() {
     if (anchor) dive(label || "source", anchor);
   };
 
+  const openChat = (seed: ChatSeed) => {
+    // reopen an existing thread for the same passage instead of duplicating it
+    const existing = threads.find(
+      (t) => t.seed.selection === seed.selection && t.seed.sectionAnchor === seed.sectionAnchor,
+    );
+    if (existing) {
+      setActiveThreadId(existing.id);
+      return;
+    }
+    const thread: ChatThread = { id: crypto.randomUUID(), seed, messages: [] };
+    setThreads((prev) => [...prev, thread]);
+    setActiveThreadId(thread.id);
+  };
+
+  const setThreadMessages = (id: string, messages: ChatMsg[]) =>
+    setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, messages } : t)));
+
+  const activeThread = threads.find((t) => t.id === activeThreadId) ?? null;
+
   if (doc.isError || html.isError || graph.isError) {
     const err = (doc.error || html.error || graph.error) as Error;
     return (
@@ -70,6 +97,13 @@ export default function Reader() {
           Verity
         </Link>
         <Breadcrumb title={doc.data.title} trail={trail} onPopBack={popBack} />
+        {threads.length > 0 && (
+          <ConversationsMenu
+            threads={threads}
+            activeId={activeThreadId}
+            onOpen={setActiveThreadId}
+          />
+        )}
         {symbolCount > 0 && (
           <button
             type="button"
@@ -103,7 +137,17 @@ export default function Reader() {
         snapshot={snapshot}
         onClear={clear}
         onJumpAnchor={handleJumpAnchor}
+        onOpenChat={openChat}
       />
+      {activeThread && (
+        <ChatDock
+          docId={docId!}
+          thread={activeThread}
+          onMessages={(m) => setThreadMessages(activeThread.id, m)}
+          onClose={() => setActiveThreadId(null)}
+          onJumpToPassage={(t) => t.seed.sectionAnchor && dive(t.seed.section || "passage", t.seed.sectionAnchor)}
+        />
+      )}
     </div>
   );
 }

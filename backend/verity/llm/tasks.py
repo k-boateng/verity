@@ -29,7 +29,10 @@ _GROUNDING = (
     f"exactly: {ABSTAIN_TOKEN}"
 )
 
-_PLAIN = " Write plain prose — no markdown, asterisks, bullets, or headers."
+_PLAIN = (
+    " Write plain prose — no markdown headers, bullets, or bold. You may write "
+    "mathematical symbols and expressions in LaTeX, inline as $...$."
+)
 
 _RESOLVE_SYSTEM = (
     "You are Verity, a reading aid embedded inside a scientific paper. The reader "

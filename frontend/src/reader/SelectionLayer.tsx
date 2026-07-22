@@ -2,7 +2,8 @@ import { autoUpdate, flip, offset, shift, useFloating } from "@floating-ui/react
 import { useEffect, useMemo, useState } from "react";
 import type { GraphNode, ResolveResult } from "../api";
 import { api } from "../api";
-import AnchoredChat from "./AnchoredChat";
+import type { ChatSeed } from "./ChatDock";
+import RichText from "./RichText";
 import type { SelectionSnapshot } from "./useSelection";
 
 interface Props {
@@ -12,11 +13,11 @@ interface Props {
   snapshot: SelectionSnapshot | null;
   onClear: () => void;
   onJumpAnchor: (label: string, anchor: string) => void;
+  onOpenChat: (seed: ChatSeed) => void;
 }
 
-type Phase = "chip" | "resolving" | "resolved" | "chat";
+type Phase = "chip" | "resolving" | "resolved";
 
-// A virtual reference so floating-ui can anchor to the raw selection rect.
 function useRectFloating(rect: DOMRect | null) {
   const floating = useFloating({
     placement: "top",
@@ -24,9 +25,7 @@ function useRectFloating(rect: DOMRect | null) {
     whileElementsMounted: autoUpdate,
   });
   useEffect(() => {
-    if (rect) {
-      floating.refs.setReference({ getBoundingClientRect: () => rect } as never);
-    }
+    if (rect) floating.refs.setReference({ getBoundingClientRect: () => rect } as never);
   }, [rect, floating.refs]);
   return floating;
 }
@@ -38,6 +37,7 @@ export default function SelectionLayer({
   snapshot,
   onClear,
   onJumpAnchor,
+  onOpenChat,
 }: Props) {
   const [phase, setPhase] = useState<Phase>("chip");
   const [result, setResult] = useState<ResolveResult | null>(null);
@@ -48,7 +48,6 @@ export default function SelectionLayer({
     return map;
   }, [nodes]);
 
-  // A fresh selection resets the flow back to the chip.
   useEffect(() => {
     setPhase("chip");
     setResult(null);
@@ -88,27 +87,26 @@ export default function SelectionLayer({
     }
   };
 
-  if (phase === "chat") {
-    return (
-      <div ref={refs.setFloating} style={floatingStyles} className="selection-ui">
-        <AnchoredChat
-          docId={docId}
-          seed={{
-            paragraph: snapshot.paragraphText,
-            selection: snapshot.text,
-            section: sectionLabel,
-            dependencies,
-          }}
-          onClose={onClear}
-        />
-      </div>
-    );
-  }
+  const openChat = () => {
+    onOpenChat({
+      paragraph: snapshot.paragraphText,
+      selection: snapshot.text,
+      section: sectionLabel,
+      sectionAnchor: snapshot.sectionAnchor,
+      dependencies,
+    });
+    onClear();
+  };
 
   return (
     <div ref={refs.setFloating} style={floatingStyles} className="selection-ui">
       {phase === "chip" && (
-        <button type="button" className="ask-chip" onClick={runResolve} onMouseDown={(e) => e.preventDefault()}>
+        <button
+          type="button"
+          className="ask-chip"
+          onClick={runResolve}
+          onMouseDown={(e) => e.preventDefault()}
+        >
           ✦ Explain this
         </button>
       )}
@@ -120,7 +118,7 @@ export default function SelectionLayer({
           result={result}
           llmConfigured={llmConfigured}
           onJump={() => result.anchor && onJumpAnchor(result.label, result.anchor)}
-          onAsk={() => setPhase("chat")}
+          onAsk={openChat}
           onClose={onClear}
         />
       )}
@@ -158,6 +156,14 @@ function ResolutionCard({
     );
   }
 
+  if (result.mode === "error") {
+    return (
+      <div className="resolution-card">
+        <div className="rc-body">{result.content}</div>
+      </div>
+    );
+  }
+
   const isRetrieved = result.mode === "retrieved";
   const isAbstained = result.mode === "abstained";
 
@@ -175,7 +181,9 @@ function ResolutionCard({
         )}
         {result.label && <span className="rc-label">{result.label}</span>}
       </div>
-      <div className={`rc-body ${isRetrieved ? "paper-voice" : ""}`}>{result.content}</div>
+      <div className={`rc-body ${isRetrieved ? "paper-voice" : ""}`}>
+        <RichText text={result.content} />
+      </div>
       <div className="rc-actions">
         {isRetrieved && result.anchor && (
           <button type="button" className="rc-link" onClick={onJump}>

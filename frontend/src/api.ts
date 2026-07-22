@@ -123,7 +123,12 @@ export interface ResolveRequest {
   dependencies?: string[];
 }
 
-export type ResolveMode = "retrieved" | "generated" | "abstained" | "unconfigured";
+export type ResolveMode =
+  | "retrieved"
+  | "generated"
+  | "abstained"
+  | "unconfigured"
+  | "error";
 
 export interface ResolveResult {
   mode: ResolveMode;

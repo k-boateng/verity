@@ -136,6 +136,15 @@ def get_asset(safe_id: str, asset_path: str) -> FileResponse:
 
 # --- Resolution (Ask) -----------------------------------------------------
 
+def _friendly_error(exc: Exception) -> str:
+    """Turn a raw provider error into something a reader should see. Free-tier
+    rate limits are common, so they get their own clear message."""
+    s = str(exc).lower()
+    if any(k in s for k in ("429", "resource_exhausted", "retryinfo", "quota", "rate limit")):
+        return "The free-tier model is rate-limited right now — wait a minute and try again."
+    return "Something went wrong reaching the model. Try again in a moment."
+
+
 class ResolveRequest(BaseModel):
     selection: str
     paragraph: str = ""
@@ -190,7 +199,7 @@ def resolve_selection(doc_id: int, req: ResolveRequest) -> dict:
             dependencies=req.dependencies,
         )
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"generation failed: {exc}")
+        return {"mode": "error", "content": _friendly_error(exc), "label": "", "anchor": ""}
 
     abstained = llm_tasks.is_abstention(answer)
     return {
@@ -227,9 +236,15 @@ def chat(doc_id: int, req: ChatRequest):
 
     system = (
         "You are Verity, embedded in a scientific paper, having a short focused "
-        "conversation anchored to one paragraph. Answer concisely and ground your "
-        "answers in the paragraph and the resolved references provided. If something "
-        "isn't supported by that context, say so plainly rather than guessing."
+        "conversation anchored to a specific passage. Answer the reader's questions "
+        "clearly and helpfully, drawing on BOTH the anchored context and your general "
+        "knowledge of the field. Ground any claim about what THIS paper specifically "
+        "does, defines, or reports in the provided context; but for concepts, "
+        "background, and 'why' questions, use standard knowledge of the field — do "
+        "NOT refuse just because the anchored passage doesn't restate the answer. The "
+        "passage is context, not a limit on what you may explain. Be concise. Write in "
+        "plain prose — no markdown bold, headers, or bullet lists — but write any math "
+        "in LaTeX: inline as $...$ and display equations as $$...$$."
     )
     seed = (
         f'Paper: "{title}"\nSection: {req.section or "unknown"}\n\n'
@@ -248,9 +263,9 @@ def chat(doc_id: int, req: ChatRequest):
 
     def token_stream():
         try:
-            for piece in provider.stream(system, transcript, max_tokens=700):
+            for piece in provider.stream(system, transcript, max_tokens=900):
                 yield piece
-        except Exception as exc:  # surface, don't hang the stream
-            yield f"\n\n[error: {exc}]"
+        except Exception as exc:  # surface cleanly, don't hang or dump raw errors
+            yield "\n\n" + _friendly_error(exc)
 
     return StreamingResponse(token_stream(), media_type="text/plain; charset=utf-8")

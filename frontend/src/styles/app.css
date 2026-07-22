@@ -488,35 +488,47 @@ a {
   color: var(--violet);
 }
 
-/* Anchored chat */
-.anchored-chat {
-  z-index: 60;
-  width: 380px;
-  max-width: 90vw;
+/* Anchored chat — docked, stable, sticky (only ✕ closes it) */
+.chat-dock {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 70;
+  width: 400px;
+  max-width: calc(100vw - 40px);
   background: var(--ground);
   border: 1px solid var(--hairline);
-  border-radius: 12px;
-  box-shadow: var(--shadow);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(25, 39, 68, 0.22);
   display: flex;
   flex-direction: column;
-  max-height: 460px;
+  max-height: min(72vh, 640px);
 }
 
 .chat-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 11px 14px;
   border-bottom: 1px solid var(--hairline);
 }
 
 .chat-anchor {
+  border: none;
+  background: none;
+  padding: 0;
   font-size: 0.76rem;
-  color: var(--muted);
+  color: var(--link);
   font-style: italic;
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+}
+
+.chat-anchor:hover {
+  text-decoration: underline;
 }
 
 .chat-close {
@@ -524,31 +536,34 @@ a {
   border: none;
   background: none;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   padding: 0 2px;
+  flex: none;
 }
 
 .chat-body {
   flex: 1;
   overflow-y: auto;
-  padding: 12px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .chat-hint {
   color: var(--muted);
   font-size: 0.82rem;
+  line-height: 1.5;
   margin: 0;
 }
 
 .chat-msg {
-  font-size: 0.86rem;
-  line-height: 1.55;
-  padding: 8px 11px;
-  border-radius: 9px;
-  max-width: 85%;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  padding: 9px 12px;
+  border-radius: 10px;
+  max-width: 88%;
+  overflow-x: auto;
 }
 
 .chat-msg.user {
@@ -562,24 +577,34 @@ a {
   background: var(--panel);
 }
 
+.chat-typing {
+  color: var(--muted);
+}
+
 .chat-input {
   display: flex;
+  align-items: flex-end;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 11px 12px;
   border-top: 1px solid var(--hairline);
 }
 
-.chat-input input {
+.chat-input textarea {
   flex: 1;
   font: inherit;
-  font-size: 0.86rem;
-  padding: 7px 10px;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  padding: 8px 10px;
   border: 1px solid var(--hairline);
-  border-radius: 7px;
+  border-radius: 8px;
   outline: none;
+  resize: none;
+  min-height: 38px;
+  max-height: 160px;
+  overflow-y: auto;
 }
 
-.chat-input input:focus-visible {
+.chat-input textarea:focus-visible {
   border-color: var(--link);
   box-shadow: 0 0 0 3px var(--link-soft);
 }
@@ -590,12 +615,91 @@ a {
   color: #fff;
   font-weight: 600;
   font-size: 0.82rem;
-  border-radius: 7px;
-  padding: 7px 14px;
+  border-radius: 8px;
+  padding: 9px 16px;
+  flex: none;
 }
 
 .chat-input button:disabled {
   opacity: 0.5;
+}
+
+/* KaTeX: keep rendered math from overflowing bubbles/cards */
+.chat-msg .katex,
+.rc-body .katex {
+  font-size: 1em;
+}
+
+.chat-msg .katex-display,
+.rc-body .katex-display {
+  margin: 0.4em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Conversations reopener */
+.conversations {
+  position: relative;
+  flex: none;
+}
+
+.conversations-btn {
+  border: 1px solid var(--hairline);
+  background: var(--ground);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 4px 12px;
+}
+
+.conversations-btn.active {
+  background: var(--ai-violet-soft);
+  border-color: var(--ai-violet);
+  color: var(--ai-violet);
+}
+
+.conversations-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 80;
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  width: 280px;
+  background: var(--ground);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+
+.conversations-menu li button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  border-radius: 7px;
+  padding: 8px 10px;
+}
+
+.conversations-menu li button:hover,
+.conversations-menu li button.active {
+  background: var(--panel);
+}
+
+.conv-quote {
+  font-family: var(--serif);
+  font-size: 0.86rem;
+  color: var(--ink);
+}
+
+.conv-meta {
+  font-size: 0.72rem;
+  color: var(--muted);
 }
 
 /* the browser's native selection highlight, tuned to the paper */
