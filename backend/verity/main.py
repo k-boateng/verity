@@ -211,6 +211,46 @@ def resolve_selection(doc_id: int, req: ResolveRequest) -> dict:
     }
 
 
+# --- Equation resolution --------------------------------------------------
+
+class ExplainEquationRequest(BaseModel):
+    latex: str
+    context: str = ""
+    symbols: list[str] = []
+
+
+@app.post("/api/documents/{doc_id}/explain-equation")
+def explain_equation(doc_id: int, req: ExplainEquationRequest) -> dict:
+    if not req.latex.strip():
+        raise HTTPException(status_code=422, detail="no equation")
+    provider = get_provider()
+    if not provider.is_configured():
+        return {"mode": "unconfigured", "content": ""}
+
+    session = db.get_session()
+    try:
+        title = _get_doc(session, doc_id).title
+    finally:
+        session.close()
+
+    try:
+        answer = llm_tasks.explain_equation(
+            provider,
+            latex=req.latex,
+            context=req.context,
+            symbols=req.symbols,
+            title=title,
+        )
+    except Exception as exc:
+        return {"mode": "error", "content": _friendly_error(exc)}
+
+    abstained = llm_tasks.is_abstention(answer)
+    return {
+        "mode": "abstained" if abstained else "generated",
+        "content": llm_tasks.ABSTAIN_MESSAGE if abstained else answer,
+    }
+
+
 # --- Anchored chat (persisted server-side) --------------------------------
 
 _CHAT_SYSTEM = (

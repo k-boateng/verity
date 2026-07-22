@@ -87,6 +87,13 @@ export const api = {
 
   getConfig: () => fetch("/api/config").then((r) => handle<{ llm_configured: boolean }>(r)),
 
+  explainEquation: (docId: string | number, req: { latex: string; context?: string; symbols?: string[] }) =>
+    fetch(`/api/documents/${docId}/explain-equation`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req),
+    }).then((r) => handle<{ mode: ResolveMode; content: string }>(r)),
+
   resolve: (docId: string | number, req: ResolveRequest) =>
     fetch(`/api/documents/${docId}/resolve`, {
       method: "POST",

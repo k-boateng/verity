@@ -152,6 +152,23 @@ def test_chat_persists_and_reopens(client, doc):
     assert any(c["id"] == chat_id and c["question_count"] == 1 for c in listed)
 
 
+def test_explain_equation(client, doc):
+    llm.set_provider(FakeProvider(reply="It computes scaled dot-product attention."))
+    resp = client.post(
+        f"/api/documents/{doc}/explain-equation",
+        json={"latex": "A = \\mathrm{softmax}(QK^T/\\sqrt{d_k})V", "context": "attention", "symbols": ["Q", "K"]},
+    )
+    body = resp.json()
+    assert body["mode"] == "generated"
+    assert "attention" in body["content"]
+
+
+def test_explain_equation_unconfigured(client, doc):
+    llm.set_provider(FakeProvider(configured=False))
+    resp = client.post(f"/api/documents/{doc}/explain-equation", json={"latex": "x=1"})
+    assert resp.json()["mode"] == "unconfigured"
+
+
 def test_chat_message_requires_model(client, doc):
     llm.set_provider(FakeProvider(configured=False))
     created = client.post(

@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GraphNode } from "../api";
+import EquationLayer from "./EquationLayer";
 import HoverCard from "./HoverCard";
 
 interface Props {
+  docId: string;
   html: string;
   nodes: GraphNode[];
+  llmConfigured: boolean;
   onJump: (node: GraphNode) => void;
   onVisibleSectionsChange?: (visible: Set<string>) => void;
 }
@@ -20,7 +23,14 @@ interface HoverState {
 const OPEN_DELAY_MS = 120;
 const CLOSE_DELAY_MS = 300;
 
-export default function PaperView({ html, nodes, onJump, onVisibleSectionsChange }: Props) {
+export default function PaperView({
+  docId,
+  html,
+  nodes,
+  llmConfigured,
+  onJump,
+  onVisibleSectionsChange,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<HoverState | null>(null);
   const openTimer = useRef<number | undefined>(undefined);
@@ -171,6 +181,7 @@ export default function PaperView({ html, nodes, onJump, onVisibleSectionsChange
           onMouseLeave={scheduleClose}
         />
       )}
+      <EquationLayer docId={docId} containerRef={containerRef} llmConfigured={llmConfigured} />
     </div>
   );
 }

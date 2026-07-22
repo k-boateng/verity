@@ -124,8 +124,10 @@ export default function Reader() {
       </nav>
       <div className={`reader-layout ${notationOpen ? "with-notation" : ""}`}>
         <PaperView
+          docId={docId!}
           html={html.data}
           nodes={graph.data.nodes}
+          llmConfigured={cfg.data?.llm_configured ?? false}
           onJump={handleJump}
           onVisibleSectionsChange={setVisibleSections}
         />
