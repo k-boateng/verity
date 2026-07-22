@@ -1,0 +1,239 @@
+/* The paper's voice — serif, calm, and unmistakably a paper.
+   Styles the LaTeXML (ltx_*) markup that ingestion stores. */
+
+.paper-voice {
+  font-family: var(--serif);
+  color: var(--ink);
+}
+
+.paper-body {
+  font-size: 1.02rem;
+  line-height: 1.75;
+  max-width: 46rem;
+}
+
+/* Title block */
+.paper-body .ltx_title_document {
+  font-size: 1.85rem;
+  font-weight: 600;
+  line-height: 1.25;
+  text-wrap: balance;
+  margin: 0 0 10px;
+}
+
+.paper-body .ltx_authors {
+  font-family: var(--sans);
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+}
+
+.paper-body .ltx_abstract {
+  border-left: 3px solid var(--hairline);
+  padding-left: 18px;
+  margin: 26px 0;
+}
+
+.paper-body .ltx_abstract .ltx_title {
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Section titles */
+.paper-body .ltx_title_section,
+.paper-body .ltx_title_appendix {
+  font-size: 1.35rem;
+  font-weight: 600;
+  margin: 2.2em 0 0.6em;
+  text-wrap: balance;
+}
+
+.paper-body .ltx_title_subsection {
+  font-size: 1.12rem;
+  font-weight: 600;
+  margin: 1.8em 0 0.5em;
+}
+
+.paper-body .ltx_title_subsubsection,
+.paper-body .ltx_title_paragraph {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 1.5em 0 0.4em;
+}
+
+.paper-body .ltx_p {
+  margin: 0 0 1em;
+}
+
+/* Every resolvable object: quiet dotted underline, never a loud link */
+.paper-body a[data-verity] {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1.5px dotted #9aa1ab;
+  cursor: pointer;
+}
+
+.paper-body a[data-verity]:hover,
+.paper-body a[data-verity]:focus-visible {
+  background: var(--link-soft);
+  border-bottom: 2px solid var(--link);
+  outline: none;
+}
+
+.paper-body a[data-verity-kind="citation"] {
+  color: var(--link);
+  border-bottom-color: #a9c0ec;
+}
+
+/* Plain external links */
+.paper-body a:not([data-verity]) {
+  color: var(--link);
+  text-decoration: none;
+}
+
+.paper-body a:not([data-verity]):hover {
+  text-decoration: underline;
+}
+
+/* Equations */
+.paper-body .ltx_equation,
+.paper-body .ltx_equationgroup {
+  width: 100%;
+  margin: 1.2em 0;
+  border-collapse: collapse;
+  overflow-x: auto;
+  display: block;
+}
+
+.paper-body .ltx_equation td {
+  border: none;
+  padding: 2px 6px;
+}
+
+.paper-body .ltx_eqn_cell {
+  text-align: center;
+}
+
+.paper-body .ltx_tag_equation {
+  color: var(--muted);
+  font-size: 0.9em;
+}
+
+.paper-body math {
+  font-size: 1.05em;
+}
+
+/* Figures & tables */
+.paper-body .ltx_figure,
+.paper-body .ltx_table {
+  margin: 1.6em 0;
+}
+
+.paper-body .ltx_figure img {
+  max-width: 100%;
+  height: auto;
+}
+
+.paper-body .ltx_caption {
+  font-family: var(--sans);
+  font-size: 0.84rem;
+  color: var(--muted);
+  line-height: 1.5;
+  margin-top: 8px;
+}
+
+.paper-body .ltx_tabular {
+  border-collapse: collapse;
+  font-size: 0.92em;
+  margin: 0 auto;
+}
+
+.paper-body .ltx_tabular td,
+.paper-body .ltx_tabular th {
+  padding: 4px 10px;
+  border: none;
+}
+
+.paper-body .ltx_th {
+  font-weight: 600;
+}
+
+.paper-body .ltx_border_t td,
+.paper-body td.ltx_border_t,
+.paper-body th.ltx_border_t {
+  border-top: 1px solid var(--hairline);
+}
+
+.paper-body .ltx_border_b td,
+.paper-body td.ltx_border_b,
+.paper-body th.ltx_border_b {
+  border-bottom: 1px solid var(--hairline);
+}
+
+/* Theorem-like environments */
+.paper-body .ltx_theorem {
+  margin: 1.4em 0;
+  padding: 14px 18px;
+  background: var(--panel);
+  border-radius: 8px;
+}
+
+.paper-body .ltx_theorem .ltx_title {
+  font-size: 1rem;
+  display: inline;
+  margin: 0;
+}
+
+/* Bibliography */
+.paper-body .ltx_bibliography .ltx_title {
+  font-size: 1.35rem;
+  font-weight: 600;
+  margin: 2.2em 0 0.6em;
+}
+
+.paper-body .ltx_biblist {
+  list-style: none;
+  padding: 0;
+  font-size: 0.92rem;
+}
+
+.paper-body .ltx_bibitem {
+  margin-bottom: 0.7em;
+  padding-left: 2.4em;
+  text-indent: -2.4em;
+}
+
+.paper-body .ltx_bibitem .ltx_tag {
+  color: var(--muted);
+  margin-right: 6px;
+}
+
+/* Footnotes */
+.paper-body .ltx_note_content {
+  display: none; /* raw inline footnote bodies are noise; hover resolves them */
+}
+
+.paper-body .ltx_note_mark {
+  color: var(--link);
+  font-size: 0.8em;
+  vertical-align: super;
+}
+
+/* LaTeXML chrome we never want */
+.paper-body .ltx_page_logo,
+.paper-body .ltx_rdf,
+.paper-body footer.ltx_page_footer {
+  display: none;
+}
+
+/* Hover-card body inherits paper voice but smaller */
+.hover-card .paper-voice {
+  font-size: 0.88rem;
+}
+
+.hover-card .ltx_tag_equation {
+  display: none;
+}

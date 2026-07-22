@@ -1,0 +1,36 @@
+\documentclass{article}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\attn}[1]{\mathrm{Attn}(#1)}
+\DeclareMathOperator{\softmax}{softmax}
+\newtheorem{lem}{Lemma}
+
+\begin{document}
+
+\section{Introduction}
+\label{sec:intro}
+We study attention. % a comment with \cite{ignored}
+The weights $A \in \R^{n \times n}$ are obtained via $\softmax$; see
+Section~\ref{sec:method} and the result of \cite{vaswani2017,bahdanau2015}.
+
+\section{Method}
+\label{sec:method}
+Given $d_k$, we scale by $\sqrt{d_k}$:
+\begin{equation}
+\label{eq:attn}
+A = \softmax\left(\frac{QK^T}{\sqrt{d_k}}\right)
+\end{equation}
+By Lemma~\ref{lem:lipschitz}, using $d_k$ and $d_k$ again, with $W^Q$ and
+$W^Q$ and $W^Q$ projections, the map is stable. Also $\alpha$, $\alpha$,
+$\alpha$ appears often, as does $d_k$.
+
+\begin{lem}[Stability]
+\label{lem:lipschitz}
+For any row-stochastic $A$, the mapping $A \mapsto AV$ is 1-Lipschitz.
+\end{lem}
+
+\begin{thebibliography}{9}
+\bibitem{vaswani2017} Vaswani et al. Attention is all you need. NeurIPS 2017.
+\bibitem{bahdanau2015} Bahdanau et al. Neural machine translation. ICLR 2015.
+\end{thebibliography}
+
+\end{document}

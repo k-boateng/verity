@@ -1,0 +1,22 @@
+# Environment
+.env
+.env.*
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Data (fetched papers, database)
+backend/data/
+
+# Node
+node_modules/
+dist/
+
+# Editor/OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
