@@ -64,6 +64,8 @@ def _add_symbols(graph: GraphData, latex: LatexInfo) -> None:
     for name, body in latex.macros.items():
         if len(name) > 24 or not body or len(body) > 120:
             continue
+        if "#" in body:  # parameterized macros are commands, not notation
+            continue
         token = f"\\{name}"
         graph.nodes.append(
             {

@@ -5,6 +5,7 @@ import tarfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urljoin
 
 import httpx
 
@@ -81,7 +82,7 @@ def _fetch_html(client: httpx.Client, arxiv_id: str) -> tuple[str, str]:
         final = str(resp.url)
         # ar5iv redirects to arxiv.org/abs when it has no conversion
         if resp.status_code == 200 and "/abs/" not in final and "ltx_" in resp.text:
-            return resp.text, final if final.endswith("/") else final + "/"
+            return resp.text, final
     raise FetchError(
         f"No HTML rendering available for {arxiv_id} "
         "(neither arxiv.org/html nor ar5iv could convert it)"
@@ -170,8 +171,11 @@ def inline_inputs(main_tex: Path, max_depth: int = 5) -> str:
 
 
 def fetch_asset(base_url: str, rel_src: str, dest: Path) -> bool:
-    """Download one image/asset referenced by the HTML. Returns success."""
-    url = base_url + rel_src.lstrip("/")
+    """Download one image/asset referenced by the HTML. Returns success.
+
+    urljoin resolves rel_src exactly the way a browser would against the
+    page URL, which is what the src attributes were written for."""
+    url = urljoin(base_url, rel_src)
     try:
         with httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=30.0) as client:
             resp = _throttled_get(client, url)

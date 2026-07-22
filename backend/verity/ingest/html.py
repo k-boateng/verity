@@ -98,6 +98,27 @@ def process(html: str, safe_id: str) -> ProcessedHtml:
         link["data-verity-kind"] = targets[anchor].kind
         link["tabindex"] = "0"
 
+    # Papers don't reference every equation/figure/theorem in their text,
+    # but each is still a resolvable object (notation-sheet jumps, Phase B
+    # grounding). Add targets for every notable anchored element.
+    for selector in (
+        "ltx_equation",
+        "ltx_figure",
+        "ltx_table",
+        "ltx_theorem",
+        "ltx_bibitem",
+        "ltx_section",
+        "ltx_subsection",
+        "ltx_appendix",
+    ):
+        for element in article.find_all(class_=selector, id=True):
+            anchor = element["id"]
+            if anchor in targets:
+                continue
+            target = _build_target(element, anchor)
+            if target is not None:
+                targets[anchor] = target
+
     image_srcs = _rewrite_images(article, safe_id)
 
     return ProcessedHtml(
@@ -154,7 +175,7 @@ def _classify(element: Tag, anchor: str) -> str:
 def _build_target(element: Tag, anchor: str) -> Target | None:
     kind = _classify(element, anchor)
     label = _tag_label(element, kind)
-    section_label = _section_label_for(element)
+    section_label = "References" if kind == "citation" else _section_label_for(element)
 
     if kind == "citation":
         excerpt_text = _text(element, 600)
@@ -214,16 +235,20 @@ _KIND_PREFIX = {
 
 def _tag_label(element: Tag, kind: str) -> str:
     tag = element.find(class_="ltx_tag")
-    if tag is not None:
-        tag_text = _text(tag, 60)
-        if tag_text:
-            prefix = _KIND_PREFIX.get(kind, "")
-            if kind == "section":
-                return f"§{tag_text}" if not tag_text.startswith("§") else tag_text
-            if kind == "theorem" or kind == "citation":
-                return tag_text
-            return f"{prefix} {tag_text}".strip()
-    return ""
+    if tag is None:
+        return ""
+    tag_text = _text(tag, 60).rstrip(": ")
+    if not tag_text:
+        return ""
+    if kind == "section":
+        return tag_text if tag_text.startswith("§") else f"§{tag_text}"
+    if kind in ("theorem", "citation"):
+        return tag_text
+    prefix = _KIND_PREFIX.get(kind, "")
+    # LaTeXML tags often already carry the word ("Figure 1"): don't double it
+    if prefix and tag_text.lower().startswith(prefix.lower().rstrip(".")):
+        return tag_text
+    return f"{prefix} {tag_text}".strip()
 
 
 def _enclosing_section_anchor(link: Tag) -> str:

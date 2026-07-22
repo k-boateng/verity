@@ -19,6 +19,9 @@ SAMPLE_HTML = """
     <td><span class="ltx_tag ltx_tag_equation">(1)</span></td></tr>
   </table>
   <div class="ltx_para"><p class="ltx_p"><img src="x1.png"/></p></div>
+  <figure id="S2.F1" class="ltx_figure">
+    <figcaption class="ltx_caption"><span class="ltx_tag ltx_tag_figure">Figure 1:</span> An unreferenced picture.</figcaption>
+  </figure>
 </section>
 <section id="bib" class="ltx_bibliography">
   <ul>
@@ -40,6 +43,12 @@ def test_process_builds_targets_and_occurrences():
     assert "A = QK^T" in by_anchor["S2.E1"].excerpt_text
     assert by_anchor["bib.bib1"].kind == "citation"
     assert "Vaswani" in by_anchor["bib.bib1"].excerpt_text
+    assert by_anchor["bib.bib1"].section_label == "References"
+
+    # unreferenced-but-notable elements still become resolvable targets
+    assert by_anchor["S2.F1"].kind == "figure"
+    assert by_anchor["S2.F1"].label == "Figure 1"  # no "Figure Figure 1:"
+    assert "unreferenced picture" in by_anchor["S2.F1"].excerpt_text
 
     kinds = {(o.target_anchor, o.kind) for o in processed.occurrences}
     assert ("S2.E1", "references") in kinds
@@ -60,10 +69,13 @@ def test_process_stamps_and_sanitizes():
 def test_graph_merges_symbols_with_abstention():
     processed = html.process(SAMPLE_HTML, "1234.5678")
     info = latex.LatexInfo(
-        macros={"R": "\\mathbb{R}"},
+        macros={"R": "\\mathbb{R}", "todo": "\\textcolor{red}{[[#1]]}"},
         symbols=[{"token": "d_k", "count": 5}],
     )
     g = graph.build(processed, info)
+
+    # parameterized macros are commands, not notation
+    assert "\\todo" not in {n["label"] for n in g.nodes}
 
     symbols = [n for n in g.nodes if n["kind"] == "symbol"]
     by_label = {n["label"]: n for n in symbols}
