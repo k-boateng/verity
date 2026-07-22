@@ -416,6 +416,25 @@ a {
   font-style: italic;
 }
 
+.notation-define {
+  border: none;
+  background: none;
+  color: var(--link);
+  font-size: 0.74rem;
+  font-weight: 600;
+  font-style: normal;
+  padding: 0 0 0 8px;
+}
+
+.notation-define:hover {
+  text-decoration: underline;
+}
+
+.notation-defining {
+  color: var(--ai-violet);
+  font-size: 0.74rem;
+}
+
 /* ---------- Ask: selection chip, resolution card, chat ---------- */
 
 .ask-chip {

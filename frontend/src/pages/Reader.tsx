@@ -83,6 +83,11 @@ export default function Reader() {
   const setActiveMessages = (messages: ChatMessage[]) =>
     setActiveChat((c) => (c ? { ...c, messages } : c));
 
+  const defineSymbol = async (node: GraphNode) => {
+    await api.defineSymbol(docId!, node.id);
+    queryClient.invalidateQueries({ queryKey: ["graph", docId] });
+  };
+
   if (doc.isError || html.isError || graph.isError) {
     const err = (doc.error || html.error || graph.error) as Error;
     return (
@@ -135,7 +140,9 @@ export default function Reader() {
           <NotationSheet
             nodes={graph.data.nodes}
             visibleSections={visibleSections}
+            llmConfigured={cfg.data?.llm_configured ?? false}
             onJumpTo={handleJump}
+            onDefine={defineSymbol}
           />
         )}
       </div>

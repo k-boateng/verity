@@ -163,6 +163,39 @@ def test_explain_equation(client, doc):
     assert "attention" in body["content"]
 
 
+def test_define_symbol_caches_result(client, doc, tmp_path):
+    # a stored rendering that mentions d_k in a paragraph
+    html = tmp_path / "paper.html"
+    html.write_text(
+        '<article><div class="ltx_p"><math alttext="d_k"><mi>d</mi></math> is the key '
+        "dimension used to scale the dot products.</div></article>",
+        encoding="utf-8",
+    )
+    session = db.get_session()
+    d = session.get(Document, doc)
+    d.html_path = str(html)
+    node = Node(
+        document_id=doc, kind="symbol", label="d_k", excerpt="",
+        data={"definition_status": "unresolved", "sections": ["S3"]},
+    )
+    session.add(node)
+    session.commit()
+    node_id = node.id
+    session.close()
+
+    llm.set_provider(FakeProvider(reply="The dimension of the key vectors."))
+    body = client.post(f"/api/documents/{doc}/nodes/{node_id}/define").json()
+    assert body["data"]["definition_status"] == "grounded"
+    assert "key vectors" in body["excerpt"]
+
+    # second call returns the cache without hitting the model again
+    fake = FakeProvider(reply="SHOULD NOT BE CALLED")
+    llm.set_provider(fake)
+    again = client.post(f"/api/documents/{doc}/nodes/{node_id}/define").json()
+    assert again["excerpt"] == body["excerpt"]
+    assert fake.calls == []
+
+
 def test_explain_equation_unconfigured(client, doc):
     llm.set_provider(FakeProvider(configured=False))
     resp = client.post(f"/api/documents/{doc}/explain-equation", json={"latex": "x=1"})

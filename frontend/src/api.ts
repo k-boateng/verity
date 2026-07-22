@@ -94,6 +94,11 @@ export const api = {
       body: JSON.stringify(req),
     }).then((r) => handle<{ mode: ResolveMode; content: string }>(r)),
 
+  defineSymbol: (docId: string | number, nodeId: number) =>
+    fetch(`/api/documents/${docId}/nodes/${nodeId}/define`, { method: "POST" }).then((r) =>
+      handle<{ id: number; excerpt: string; data: GraphNode["data"] }>(r),
+    ),
+
   resolve: (docId: string | number, req: ResolveRequest) =>
     fetch(`/api/documents/${docId}/resolve`, {
       method: "POST",

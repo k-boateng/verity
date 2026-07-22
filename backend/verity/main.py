@@ -211,6 +211,57 @@ def resolve_selection(doc_id: int, req: ResolveRequest) -> dict:
     }
 
 
+# --- Symbol definitions ---------------------------------------------------
+
+@app.post("/api/documents/{doc_id}/nodes/{node_id}/define")
+def define_symbol(doc_id: int, node_id: int) -> dict:
+    """Resolve a symbol's meaning on demand, grounded in the excerpts where it
+    appears, and cache the result on the node. Retrieve-before-generate: the
+    excerpts come from the paper; only the summarizing is generated."""
+    session = db.get_session()
+    try:
+        node = session.get(Node, node_id)
+        if node is None or node.document_id != doc_id or node.kind != "symbol":
+            raise HTTPException(status_code=404, detail="symbol not found")
+
+        data = dict(node.data or {})
+        # already resolved — return the cache
+        if data.get("definition_status") in ("grounded", "inferred", "undefined"):
+            return {"id": node.id, "excerpt": node.excerpt, "data": data}
+
+        provider = get_provider()
+        if not provider.is_configured():
+            return {"id": node.id, "excerpt": "", "data": {**data, "definition_status": "unresolved"}}
+
+        doc = session.get(Document, doc_id)
+        excerpts = retrieval.symbol_excerpts(doc.html_path if doc else "", node.label)
+
+        if not excerpts:
+            data["definition_status"] = "undefined"
+            node.data = data
+            session.commit()
+            return {"id": node.id, "excerpt": "", "data": data}
+
+        try:
+            answer = llm_tasks.define_symbol(
+                provider, symbol=node.label, excerpts="\n\n".join(excerpts), title=doc.title if doc else ""
+            )
+        except Exception as exc:
+            return {"id": node.id, "excerpt": "", "data": {**data, "error": _friendly_error(exc)}}
+
+        if not answer or answer.strip().lower().startswith("not explicitly defined"):
+            data["definition_status"] = "undefined"
+            node.excerpt = ""
+        else:
+            data["definition_status"] = "grounded"
+            node.excerpt = answer.strip()
+        node.data = data
+        session.commit()
+        return {"id": node.id, "excerpt": node.excerpt, "data": data}
+    finally:
+        session.close()
+
+
 # --- Equation resolution --------------------------------------------------
 
 class ExplainEquationRequest(BaseModel):

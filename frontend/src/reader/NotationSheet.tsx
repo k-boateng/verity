@@ -4,19 +4,27 @@ import type { GraphNode } from "../api";
 interface Props {
   nodes: GraphNode[];
   visibleSections: Set<string>;
+  llmConfigured: boolean;
   onJumpTo: (node: GraphNode) => void;
+  onDefine: (node: GraphNode) => Promise<void>;
 }
 
 /** The definition column reflects how far resolution has gotten, and never
  * fabricates: a grounded definition is quoted, an inferred one is flagged,
- * a genuinely-undefined symbol abstains, and an unresolved one shows only
- * where it appears until the model fills it in. */
+ * a genuinely-undefined symbol abstains, and an unresolved one shows where it
+ * appears plus a "define" affordance that resolves it on demand. */
 function NotationDefinition({
   node,
+  llmConfigured,
+  defining,
   onJumpTo,
+  onDefine,
 }: {
   node: GraphNode;
+  llmConfigured: boolean;
+  defining: boolean;
   onJumpTo: (node: GraphNode) => void;
+  onDefine: (node: GraphNode) => void;
 }) {
   const status = node.data.definition_status ?? "unresolved";
 
@@ -40,15 +48,43 @@ function NotationDefinition({
   const sections = node.data.sections ?? [];
   return (
     <span className="notation-loc">
-      {sections.length ? `appears in ${sections.length} section${sections.length > 1 ? "s" : ""}` : "—"}
+      {sections.length ? `in ${sections.length} section${sections.length > 1 ? "s" : ""}` : "—"}
+      {llmConfigured &&
+        (defining ? (
+          <span className="notation-defining"> · resolving…</span>
+        ) : (
+          <button type="button" className="notation-define" onClick={() => onDefine(node)}>
+            define
+          </button>
+        ))}
     </span>
   );
 }
 
 type Scope = "in-view" | "all";
 
-export default function NotationSheet({ nodes, visibleSections, onJumpTo }: Props) {
+export default function NotationSheet({
+  nodes,
+  visibleSections,
+  llmConfigured,
+  onJumpTo,
+  onDefine,
+}: Props) {
   const [scope, setScope] = useState<Scope>("in-view");
+  const [defining, setDefining] = useState<Set<number>>(new Set());
+
+  const handleDefine = async (node: GraphNode) => {
+    setDefining((s) => new Set(s).add(node.id));
+    try {
+      await onDefine(node);
+    } finally {
+      setDefining((s) => {
+        const next = new Set(s);
+        next.delete(node.id);
+        return next;
+      });
+    }
+  };
 
   const symbols = useMemo(
     () =>
@@ -112,7 +148,13 @@ export default function NotationSheet({ nodes, visibleSections, onJumpTo }: Prop
               ) : (
                 <code className="notation-token">{s.label}</code>
               )}
-              <NotationDefinition node={s} onJumpTo={onJumpTo} />
+              <NotationDefinition
+                node={s}
+                llmConfigured={llmConfigured}
+                defining={defining.has(s.id)}
+                onJumpTo={onJumpTo}
+                onDefine={handleDefine}
+              />
             </li>
           ))}
         </ul>
