@@ -3,8 +3,8 @@ from collections.abc import Iterator
 
 class LLMProvider:
     """Common shape every backend implements. Kept deliberately small so a
-    different provider (Claude, a local model) can drop in without touching
-    callers."""
+    different provider (another hosted API, a local model) can drop in without
+    touching callers."""
 
     name = "base"
 
