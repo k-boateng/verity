@@ -11,6 +11,7 @@ import NotationSheet from "../reader/NotationSheet";
 import PaperView from "../reader/PaperView";
 import SelectionLayer from "../reader/SelectionLayer";
 import { useDepthTrail } from "../reader/useDepthTrail";
+import { useReadingPosition } from "../reader/useReadingPosition";
 import { useSelection } from "../reader/useSelection";
 
 export default function Reader() {
@@ -51,6 +52,9 @@ export default function Reader() {
     () => graph.data?.nodes.filter((n) => n.kind === "symbol").length ?? 0,
     [graph.data],
   );
+
+  // Restore the reader's spot once the paper has actually rendered.
+  useReadingPosition(docId, Boolean(html.data));
 
   const handleJump = (node: GraphNode) => {
     const anchor = node.definition_anchor || node.html_anchor;

@@ -152,6 +152,14 @@ def test_chat_persists_and_reopens(client, doc):
     assert any(c["id"] == chat_id and c["question_count"] == 1 for c in listed)
 
 
+def test_delete_document_removes_everything(client, doc):
+    # a chat hangs off the document; deleting the doc should cascade
+    client.post(f"/api/documents/{doc}/chats", json={"selection": "x", "section_anchor": "S1"})
+    assert client.delete(f"/api/documents/{doc}").json()["deleted"] == doc
+    assert client.get(f"/api/documents/{doc}").status_code == 404
+    assert client.get(f"/api/documents/{doc}/chats").status_code == 404
+
+
 def test_explain_equation(client, doc):
     llm.set_provider(FakeProvider(reply="It computes scaled dot-product attention."))
     resp = client.post(

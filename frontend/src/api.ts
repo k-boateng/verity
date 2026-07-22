@@ -76,6 +76,11 @@ export const api = {
   getDocument: (docId: string | number) =>
     fetch(`/api/documents/${docId}`).then((r) => handle<DocumentSummary>(r)),
 
+  deleteDocument: (docId: number) =>
+    fetch(`/api/documents/${docId}`, { method: "DELETE" }).then((r) =>
+      handle<{ deleted: number }>(r),
+    ),
+
   getHtml: async (docId: string | number): Promise<string> => {
     const resp = await fetch(`/api/documents/${docId}/html`);
     if (!resp.ok) throw new Error(`document not ready (${resp.status})`);

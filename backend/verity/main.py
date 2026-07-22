@@ -1,3 +1,4 @@
+import shutil
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -81,6 +82,22 @@ def get_document(doc_id: int) -> dict:
         return _doc_summary(_get_doc(session, doc_id))
     finally:
         session.close()
+
+
+@app.delete("/api/documents/{doc_id}")
+def delete_document(doc_id: int) -> dict:
+    session = db.get_session()
+    try:
+        doc = _get_doc(session, doc_id)
+        arxiv_id = doc.arxiv_id
+        session.delete(doc)  # cascades to nodes, edges, chats
+        session.commit()
+    finally:
+        session.close()
+    doc_dir = config.DOCUMENTS_DIR / arxiv_id.replace("/", "_")
+    if doc_dir.exists():
+        shutil.rmtree(doc_dir, ignore_errors=True)
+    return {"deleted": doc_id}
 
 
 @app.get("/api/documents/{doc_id}/html", response_class=HTMLResponse)
