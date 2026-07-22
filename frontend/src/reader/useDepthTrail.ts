@@ -12,22 +12,29 @@ export function useDepthTrail() {
   const [trail, setTrail] = useState<TrailEntry[]>([]);
 
   const dive = useCallback((label: string, anchor: string) => {
-    setTrail((t) => [...t, { label, anchor, returnScrollY: window.scrollY }]);
     const el = document.getElementById(anchor);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    if (!el) return;
+    // Read the position NOW: state updaters run later (after the scroll
+    // below has already moved the page), so reading scrollY inside one
+    // would record the destination instead of the way back.
+    const returnScrollY = window.scrollY;
+    setTrail((t) => [...t, { label, anchor, returnScrollY }]);
+    // Instant scroll: smooth scrolling is unreliable over long distances
+    // and disorienting on a 20k-pixel jump. The flash shows where you landed.
+    el.scrollIntoView({ block: "start" });
+    el.classList.add("verity-flash");
+    window.setTimeout(() => el.classList.remove("verity-flash"), 1600);
   }, []);
 
   const popBack = useCallback(() => {
-    setTrail((t) => {
-      const last = t[t.length - 1];
-      if (last) {
-        window.scrollTo({ top: last.returnScrollY, behavior: "smooth" });
-      }
-      return t.slice(0, -1);
-    });
-  }, []);
+    // Side effects stay out of the state updater: React may replay updaters,
+    // and a DOM write inside one is silently dropped.
+    const last = trail[trail.length - 1];
+    if (last) {
+      window.scrollTo(0, last.returnScrollY);
+    }
+    setTrail((t) => t.slice(0, -1));
+  }, [trail]);
 
   const reset = useCallback(() => setTrail([]), []);
 

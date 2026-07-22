@@ -222,6 +222,32 @@
   vertical-align: super;
 }
 
+/* Jump targets clear the sticky reader bar and flash on arrival */
+.paper-body [id] {
+  scroll-margin-top: 76px;
+}
+
+.verity-flash {
+  animation: verity-flash 1.6s ease-out;
+}
+
+@keyframes verity-flash {
+  0%,
+  35% {
+    background-color: var(--link-soft);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .verity-flash {
+    animation: none;
+    background-color: var(--link-soft);
+  }
+}
+
 /* LaTeXML chrome we never want */
 .paper-body .ltx_page_logo,
 .paper-body .ltx_rdf,
