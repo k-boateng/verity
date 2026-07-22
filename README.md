@@ -26,6 +26,17 @@ pip install -r requirements.txt
 uvicorn verity.main:app --reload --port 8000
 ```
 
+To enable explanations (the "Ask" gesture) and the anchored chat, add a Gemini
+API key in `backend/.env`:
+
+```
+GEMINI_API_KEY=your_key_here
+```
+
+Get a free key at https://aistudio.google.com. Without it, the reader and
+retrieval-grounded resolution still work; only generated explanations are
+disabled. Override the model with `VERITY_LLM_MODEL` if needed.
+
 Frontend (Node 18+):
 
 ```

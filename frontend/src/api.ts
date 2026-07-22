@@ -31,6 +31,9 @@ export interface GraphNode {
     source?: string;
     count?: number;
     sections?: string[];
+    label_mathml?: string;
+    macro_name?: string;
+    definition_status?: "unresolved" | "grounded" | "inferred" | "undefined";
   };
 }
 
@@ -81,4 +84,60 @@ export const api = {
 
   getGraph: (docId: string | number) =>
     fetch(`/api/documents/${docId}/nodes`).then((r) => handle<GraphResponse>(r)),
+
+  getConfig: () => fetch("/api/config").then((r) => handle<{ llm_configured: boolean }>(r)),
+
+  resolve: (docId: string | number, req: ResolveRequest) =>
+    fetch(`/api/documents/${docId}/resolve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req),
+    }).then((r) => handle<ResolveResult>(r)),
+
+  chatStream: async function* (
+    docId: string | number,
+    req: ChatRequest,
+    signal?: AbortSignal,
+  ): AsyncGenerator<string> {
+    const resp = await fetch(`/api/documents/${docId}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req),
+      signal,
+    });
+    if (!resp.ok || !resp.body) throw new Error(`chat failed (${resp.status})`);
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      yield decoder.decode(value, { stream: true });
+    }
+  },
 };
+
+export interface ResolveRequest {
+  selection: string;
+  paragraph?: string;
+  section?: string;
+  dependencies?: string[];
+}
+
+export type ResolveMode = "retrieved" | "generated" | "abstained" | "unconfigured";
+
+export interface ResolveResult {
+  mode: ResolveMode;
+  content: string;
+  label: string;
+  anchor: string;
+  section_label?: string;
+  model?: string;
+}
+
+export interface ChatRequest {
+  messages: { role: "user" | "assistant"; content: string }[];
+  paragraph?: string;
+  selection?: string;
+  section?: string;
+  dependencies?: string[];
+}

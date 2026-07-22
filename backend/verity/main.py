@@ -1,15 +1,25 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
-from . import config, db
+from . import config, db, retrieval
 from .ingest import IngestError, ingest
+from .llm import get_provider
+from .llm import tasks as llm_tasks
 from .models import Document, Edge, Node
 
-app = FastAPI(title="Verity API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    db.init_db()
+    yield
+
+
+app = FastAPI(title="Verity API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -17,11 +27,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-def startup() -> None:
-    db.init_db()
 
 
 class IngestRequest(BaseModel):
@@ -127,3 +132,125 @@ def get_asset(safe_id: str, asset_path: str) -> FileResponse:
     if not str(target).startswith(str(base)) or not target.exists():
         raise HTTPException(status_code=404, detail="asset not found")
     return FileResponse(target)
+
+
+# --- Resolution (Ask) -----------------------------------------------------
+
+class ResolveRequest(BaseModel):
+    selection: str
+    paragraph: str = ""
+    section: str = ""
+    dependencies: list[str] = []
+
+
+@app.get("/api/config")
+def get_config() -> dict:
+    """Lets the frontend know whether generation is available, so the Ask UI
+    can offer an honest 'set up a model' state instead of failing."""
+    return {"llm_configured": get_provider().is_configured()}
+
+
+@app.post("/api/documents/{doc_id}/resolve")
+def resolve_selection(doc_id: int, req: ResolveRequest) -> dict:
+    selection = req.selection.strip()
+    if not selection:
+        raise HTTPException(status_code=422, detail="empty selection")
+
+    session = db.get_session()
+    try:
+        doc = _get_doc(session, doc_id)
+
+        # 1. Retrieve: does the paper define this itself?
+        hit = retrieval.retrieve_selection(session, doc, selection)
+        if hit is not None:
+            return {
+                "mode": "retrieved",
+                "content": hit.content,
+                "label": hit.label,
+                "anchor": hit.anchor,
+                "section_label": hit.section_label,
+            }
+
+        # 2. Generate: only if the paper can't answer, and only if configured.
+        provider = get_provider()
+        if not provider.is_configured():
+            return {"mode": "unconfigured", "content": "", "label": "", "anchor": ""}
+
+        title = doc.title
+    finally:
+        session.close()
+
+    try:
+        answer = llm_tasks.resolve_selection(
+            provider,
+            selection=selection,
+            paragraph=req.paragraph,
+            section=req.section,
+            title=title,
+            dependencies=req.dependencies,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"generation failed: {exc}")
+
+    abstained = llm_tasks.is_abstention(answer)
+    return {
+        "mode": "abstained" if abstained else "generated",
+        "content": llm_tasks.ABSTAIN_MESSAGE if abstained else answer,
+        "label": "",
+        "anchor": "",
+        "model": get_provider().name,
+    }
+
+
+class ChatRequest(BaseModel):
+    messages: list[dict]  # [{role: "user"|"assistant", content: str}]
+    paragraph: str = ""
+    selection: str = ""
+    section: str = ""
+    dependencies: list[str] = []
+
+
+@app.post("/api/documents/{doc_id}/chat")
+def chat(doc_id: int, req: ChatRequest):
+    """Anchored chat — the escape hatch. Streams a reply seeded warm with the
+    paragraph, the selection, and the resolved dependencies."""
+    provider = get_provider()
+    if not provider.is_configured():
+        raise HTTPException(status_code=409, detail="no model configured")
+
+    session = db.get_session()
+    try:
+        doc = _get_doc(session, doc_id)
+        title = doc.title
+    finally:
+        session.close()
+
+    system = (
+        "You are Verity, embedded in a scientific paper, having a short focused "
+        "conversation anchored to one paragraph. Answer concisely and ground your "
+        "answers in the paragraph and the resolved references provided. If something "
+        "isn't supported by that context, say so plainly rather than guessing."
+    )
+    seed = (
+        f'Paper: "{title}"\nSection: {req.section or "unknown"}\n\n'
+        f"Anchored paragraph:\n\"\"\"\n{req.paragraph.strip()}\n\"\"\"\n\n"
+    )
+    if req.selection.strip():
+        seed += f'The reader first highlighted: "{req.selection.strip()}"\n\n'
+    if req.dependencies:
+        seed += "Nearby resolved references:\n" + "\n".join(f"- {d}" for d in req.dependencies[:12]) + "\n\n"
+
+    transcript = seed + "Conversation so far:\n"
+    for m in req.messages:
+        who = "Reader" if m.get("role") == "user" else "Verity"
+        transcript += f"{who}: {m.get('content', '').strip()}\n"
+    transcript += "Verity:"
+
+    def token_stream():
+        try:
+            for piece in provider.stream(system, transcript, max_tokens=700):
+                yield piece
+        except Exception as exc:  # surface, don't hang the stream
+            yield f"\n\n[error: {exc}]"
+
+    return StreamingResponse(token_stream(), media_type="text/plain; charset=utf-8")

@@ -88,19 +88,30 @@ def test_graph_merges_symbols_with_abstention():
     )
     g = graph.build(processed, info)
 
-    # parameterized macros are commands, not notation
-    assert "\\todo" not in {n["label"] for n in g.nodes}
-
     symbols = [n for n in g.nodes if n["kind"] == "symbol"]
     by_label = {n["label"]: n for n in symbols}
-    # macro-derived symbol is grounded with its definition body
-    assert by_label["\\R"]["excerpt"] == "\\mathbb{R}"
-    assert by_label["\\R"]["data"]["grounded"] is True
-    # scanned token is listed but ungrounded (abstention state)
-    assert by_label["d_k"]["excerpt"] == ""
-    assert by_label["d_k"]["data"]["grounded"] is False
-    # context-awareness: d_k appears in section S2's math
-    assert by_label["d_k"]["data"]["sections"] == ["S2"]
+
+    # parameterized macros are commands, not notation
+    assert "\\textcolor{red}{[[#1]]}" not in by_label
+
+    # macro is labelled by its EXPANSION (what the reader sees), not the name
+    assert "\\mathbb{R}" in by_label
+    assert "\\R" not in by_label
+    assert by_label["\\mathbb{R}"]["data"]["macro_name"] == "\\R"
+
+    # bare-letter plumbing macros are dropped as noise
+    g2 = graph.build(processed, latex.LatexInfo(macros={"kq": "q"}))
+    assert "q" not in {n["label"] for n in g2.nodes if n["kind"] == "symbol"}
+
+    # no fabricated definitions — every fresh symbol is unresolved with no excerpt
+    for node in symbols:
+        assert node["excerpt"] == ""
+        assert node["data"]["definition_status"] == "unresolved"
+
+    # scanned token carries its rendered form and where it appears
+    dk = by_label["d_k"]
+    assert dk["data"]["sections"] == ["S2"]
+    assert dk["data"]["label_mathml"].startswith("<math")
 
     edge_kinds = {e["kind"] for e in g.edges}
     assert edge_kinds == {"references", "cites"}

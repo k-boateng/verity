@@ -7,6 +7,44 @@ interface Props {
   onJumpTo: (node: GraphNode) => void;
 }
 
+/** The definition column reflects how far resolution has gotten, and never
+ * fabricates: a grounded definition is quoted, an inferred one is flagged,
+ * a genuinely-undefined symbol abstains, and an unresolved one shows only
+ * where it appears until the model fills it in. */
+function NotationDefinition({
+  node,
+  onJumpTo,
+}: {
+  node: GraphNode;
+  onJumpTo: (node: GraphNode) => void;
+}) {
+  const status = node.data.definition_status ?? "unresolved";
+
+  if (status === "grounded" || status === "inferred") {
+    return (
+      <span className="notation-def">
+        {status === "inferred" && <span className="badge badge-abstain">inferred</span>}{" "}
+        {node.excerpt}
+        {node.definition_anchor && (
+          <button type="button" className="notation-jump" onClick={() => onJumpTo(node)}>
+            →
+          </button>
+        )}
+      </span>
+    );
+  }
+  if (status === "undefined") {
+    return <span className="badge badge-abstain">not stated in this paper</span>;
+  }
+  // unresolved
+  const sections = node.data.sections ?? [];
+  return (
+    <span className="notation-loc">
+      {sections.length ? `appears in ${sections.length} section${sections.length > 1 ? "s" : ""}` : "—"}
+    </span>
+  );
+}
+
 type Scope = "in-view" | "all";
 
 export default function NotationSheet({ nodes, visibleSections, onJumpTo }: Props) {
@@ -66,23 +104,15 @@ export default function NotationSheet({ nodes, visibleSections, onJumpTo }: Prop
         <ul>
           {shown.map((s) => (
             <li key={s.id} className="notation-entry">
-              <code className="notation-token">{s.label}</code>
-              {s.excerpt ? (
-                <span className="notation-def">
-                  <code>{s.excerpt}</code>
-                  {s.definition_anchor && (
-                    <button
-                      type="button"
-                      className="notation-jump"
-                      onClick={() => onJumpTo(s)}
-                    >
-                      →
-                    </button>
-                  )}
-                </span>
+              {s.data.label_mathml ? (
+                <span
+                  className="notation-token"
+                  dangerouslySetInnerHTML={{ __html: s.data.label_mathml }}
+                />
               ) : (
-                <span className="badge badge-abstain">not defined in this paper</span>
+                <code className="notation-token">{s.label}</code>
               )}
+              <NotationDefinition node={s} onJumpTo={onJumpTo} />
             </li>
           ))}
         </ul>

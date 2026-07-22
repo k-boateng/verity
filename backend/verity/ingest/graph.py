@@ -63,57 +63,73 @@ def _sections_containing(needle: str, math_by_section: dict[str, str]) -> list[s
     return [anchor for anchor, blob in math_by_section.items() if norm in blob]
 
 
+def _is_structured_symbol(body: str) -> bool:
+    """A meaningful notation symbol has structure — a sub/superscript or a
+    math-alphabet command. A bare letter (the expansion of a plumbing macro
+    like \\kq -> q) is noise the reader never registers as notation."""
+    return any(
+        marker in body
+        for marker in ("_", "^", "\\mathbb", "\\mathcal", "\\mathbf", "\\mathrm", "\\text", "\\vec", "\\hat")
+    )
+
+
+def _render_math(latex_src: str) -> str:
+    """Render a LaTeX symbol fragment to MathML so the notation sheet shows the
+    actual symbol (d_k) rather than its source form (\\dmodel). Best-effort;
+    an unrenderable fragment falls back to a plain-text label downstream."""
+    try:
+        from latex2mathml.converter import convert
+
+        return convert(latex_src)
+    except Exception:
+        return ""
+
+
 def _add_symbols(
     graph: GraphData, latex: LatexInfo, math_by_section: dict[str, str] | None = None
 ) -> None:
-    """First-cut notation sheet: macro definitions are grounded (the macro
-    body is a real definition from the source); repeated math tokens are
-    listed but explicitly ungrounded until a definition span is verified —
-    they render as the abstention state, never as a guess."""
+    """Seed the notation sheet with the symbols the reader actually sees in the
+    rendered math. Definitions are deliberately left empty here — the macro
+    body is not a definition, it's the same symbol spelled another way. Real,
+    grounded definitions are filled in later by the resolution layer; until
+    then each entry carries only its rendered form and where it appears."""
     added: set[str] = set()
 
-    for name, body in latex.macros.items():
-        if len(name) > 24 or not body or len(body) > 120:
-            continue
-        if "#" in body:  # parameterized macros are commands, not notation
-            continue
-        token = f"\\{name}"
+    def add(display_latex: str, key: str, source: str, extra: dict) -> None:
         graph.nodes.append(
             {
                 "kind": "symbol",
-                "label": token,
+                "label": display_latex,
                 "html_anchor": "",
                 "definition_anchor": "",
-                "excerpt": body,
+                "excerpt": "",  # no definition yet — never fabricate one
                 "data": {
-                    "source": "macro",
-                    "grounded": True,
-                    "section_label": "preamble",
-                    # macros never appear verbatim in rendered math; match
-                    # their expansion instead
-                    "sections": _sections_containing(body, math_by_section or {}),
+                    "source": source,
+                    "label_mathml": _render_math(display_latex),
+                    "definition_status": "unresolved",
+                    "sections": _sections_containing(key, math_by_section or {}),
+                    **extra,
                 },
             }
         )
-        added.add(token)
+        added.add(key)
 
+    # Macros: the reader sees the *expansion*, so that's the label; the macro
+    # name (\dmodel) is internal plumbing and never shown.
+    for name, body in latex.macros.items():
+        if not body or len(name) > 24 or len(body) > 60:
+            continue
+        if "#" in body:  # parameterized macros are commands, not notation
+            continue
+        if not _is_structured_symbol(body):  # skip bare-letter plumbing (\kq -> q)
+            continue
+        if body in added:
+            continue
+        add(body, body, "macro", {"macro_name": f"\\{name}"})
+
+    # Scanned math tokens: the token is already the rendered symbol.
     for sym in latex.symbols:
         token = sym["token"]
         if token in added:
             continue
-        graph.nodes.append(
-            {
-                "kind": "symbol",
-                "label": token,
-                "html_anchor": "",
-                "definition_anchor": "",
-                "excerpt": "",  # empty excerpt = "not stated in this paper" (abstention)
-                "data": {
-                    "source": "math_scan",
-                    "grounded": False,
-                    "count": sym["count"],
-                    "sections": _sections_containing(token, math_by_section or {}),
-                },
-            }
-        )
-        added.add(token)
+        add(token, token, "math_scan", {"count": sym["count"]})

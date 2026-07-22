@@ -6,13 +6,18 @@ import { api } from "../api";
 import Breadcrumb from "../reader/Breadcrumb";
 import NotationSheet from "../reader/NotationSheet";
 import PaperView from "../reader/PaperView";
+import SelectionLayer from "../reader/SelectionLayer";
 import { useDepthTrail } from "../reader/useDepthTrail";
+import { useSelection } from "../reader/useSelection";
 
 export default function Reader() {
   const { docId } = useParams<{ docId: string }>();
   const { trail, dive, popBack } = useDepthTrail();
   const [notationOpen, setNotationOpen] = useState(false);
   const [visibleSections, setVisibleSections] = useState<Set<string>>(new Set());
+  const { snapshot, clear } = useSelection();
+
+  const cfg = useQuery({ queryKey: ["config"], queryFn: api.getConfig });
 
   const doc = useQuery({
     queryKey: ["document", docId],
@@ -38,6 +43,10 @@ export default function Reader() {
   const handleJump = (node: GraphNode) => {
     const anchor = node.definition_anchor || node.html_anchor;
     if (anchor) dive(node.label || node.kind, anchor);
+  };
+
+  const handleJumpAnchor = (label: string, anchor: string) => {
+    if (anchor) dive(label || "source", anchor);
   };
 
   if (doc.isError || html.isError || graph.isError) {
@@ -87,6 +96,14 @@ export default function Reader() {
           />
         )}
       </div>
+      <SelectionLayer
+        docId={docId!}
+        nodes={graph.data.nodes}
+        llmConfigured={cfg.data?.llm_configured ?? false}
+        snapshot={snapshot}
+        onClear={clear}
+        onJumpAnchor={handleJumpAnchor}
+      />
     </div>
   );
 }
