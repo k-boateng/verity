@@ -741,6 +741,227 @@ a.lib-title:hover {
   overflow-y: hidden;
 }
 
+/* "Did it land" checkpoints */
+.badge-checkpoint {
+  background: var(--ai-violet-soft);
+  color: var(--ai-violet);
+}
+
+.checkpoint-chip {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 65;
+  display: flex;
+  align-items: stretch;
+  background: var(--ink);
+  color: var(--ground);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(25, 39, 68, 0.28);
+  overflow: hidden;
+  animation: checkpoint-rise 0.25s ease-out;
+}
+
+@keyframes checkpoint-rise {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .checkpoint-chip {
+    animation: none;
+  }
+}
+
+.checkpoint-chip-main {
+  border: none;
+  background: none;
+  color: inherit;
+  font-family: var(--sans);
+  font-size: 0.86rem;
+  font-weight: 600;
+  padding: 10px 8px 10px 16px;
+}
+
+.checkpoint-spark {
+  color: #c9bcff;
+}
+
+.checkpoint-chip-dismiss {
+  border: none;
+  background: none;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.8rem;
+  padding: 0 14px;
+}
+
+.checkpoint-chip-dismiss:hover {
+  color: #fff;
+}
+
+.checkpoint-panel {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 72;
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  background: var(--ground);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  box-shadow: 0 14px 44px rgba(25, 39, 68, 0.24);
+  display: flex;
+  flex-direction: column;
+  max-height: min(72vh, 620px);
+  animation: checkpoint-rise 0.25s ease-out;
+}
+
+.checkpoint-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.checkpoint-section {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.checkpoint-head .chat-close {
+  margin-left: auto;
+}
+
+.checkpoint-body {
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.checkpoint-q {
+  font-family: var(--serif);
+  font-size: 1.02rem;
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+
+.checkpoint-input {
+  width: 100%;
+  font: inherit;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  outline: none;
+  resize: vertical;
+}
+
+.checkpoint-input:focus-visible {
+  border-color: var(--ai-violet);
+  box-shadow: 0 0 0 3px var(--ai-violet-soft);
+}
+
+.checkpoint-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.checkpoint-check {
+  border: none;
+  background: var(--ai-violet);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.85rem;
+  border-radius: 8px;
+  padding: 8px 18px;
+}
+
+.checkpoint-check:disabled {
+  opacity: 0.5;
+}
+
+.checkpoint-reveal {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.checkpoint-reveal:hover {
+  color: var(--ink);
+}
+
+.checkpoint-loading {
+  color: var(--muted);
+}
+
+.checkpoint-feedback {
+  font-family: var(--serif);
+  font-size: 0.96rem;
+  line-height: 1.55;
+  margin: 0 0 14px;
+}
+
+.checkpoint-points {
+  list-style: none;
+  margin: 0 0 4px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.checkpoint-point {
+  display: flex;
+  gap: 10px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.checkpoint-mark {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-top: 1px;
+}
+
+.status-hit .checkpoint-mark {
+  background: var(--paper-green-soft);
+  color: var(--paper-green);
+}
+
+.status-partial .checkpoint-mark {
+  background: var(--abstain-soft);
+  color: var(--abstain);
+}
+
+.status-miss .checkpoint-mark {
+  background: #fbe9e7;
+  color: #b3261e;
+}
+
+.status-miss .checkpoint-point-text {
+  color: var(--muted);
+}
+
 /* Conversations reopener */
 .conversations {
   position: relative;

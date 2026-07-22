@@ -81,6 +81,16 @@ export const api = {
       handle<{ deleted: number }>(r),
     ),
 
+  checkpoint: (
+    docId: string | number,
+    body: { section_anchor: string; section_label?: string; answer?: string },
+  ) =>
+    fetch(`/api/documents/${docId}/checkpoint`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then((r) => handle<CheckpointResult>(r)),
+
   getHtml: async (docId: string | number): Promise<string> => {
     const resp = await fetch(`/api/documents/${docId}/html`);
     if (!resp.ok) throw new Error(`document not ready (${resp.status})`);
@@ -200,4 +210,15 @@ export interface ResolveResult {
   anchor: string;
   section_label?: string;
   model?: string;
+}
+
+export interface CheckpointPoint {
+  point: string;
+  status: "hit" | "partial" | "miss";
+}
+
+export interface CheckpointResult {
+  key_points: CheckpointPoint[];
+  feedback: string;
+  error?: boolean;
 }

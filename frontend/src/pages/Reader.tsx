@@ -1,11 +1,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { Chat, ChatMessage, GraphNode } from "../api";
 import { api } from "../api";
 import Breadcrumb from "../reader/Breadcrumb";
 import ChatDock from "../reader/ChatDock";
 import type { ChatSeed } from "../reader/ChatDock";
+import CheckpointChip from "../reader/CheckpointChip";
+import CheckpointPanel from "../reader/CheckpointPanel";
 import ConversationsMenu from "../reader/ConversationsMenu";
 import NotationSheet from "../reader/NotationSheet";
 import PaperView from "../reader/PaperView";
@@ -13,6 +15,11 @@ import SelectionLayer from "../reader/SelectionLayer";
 import { useDepthTrail } from "../reader/useDepthTrail";
 import { useReadingPosition } from "../reader/useReadingPosition";
 import { useSelection } from "../reader/useSelection";
+
+interface SectionRef {
+  anchor: string;
+  label: string;
+}
 
 export default function Reader() {
   const { docId } = useParams<{ docId: string }>();
@@ -24,6 +31,15 @@ export default function Reader() {
 
   // Chat threads live on the server; the active one is loaded into local state.
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
+
+  // "Did it land" checkpoints: an offer at a section boundary (the chip) and,
+  // when engaged, the recall panel. Offered-once tracking lives in a ref.
+  const [checkpointsOn, setCheckpointsOn] = useState(
+    () => localStorage.getItem("verity:checkpoints") !== "off",
+  );
+  const [pendingCheckpoint, setPendingCheckpoint] = useState<SectionRef | null>(null);
+  const [activeCheckpoint, setActiveCheckpoint] = useState<SectionRef | null>(null);
+  const offeredSections = useRef<Set<string>>(new Set());
 
   const cfg = useQuery({ queryKey: ["config"], queryFn: api.getConfig });
 
@@ -92,6 +108,29 @@ export default function Reader() {
     queryClient.invalidateQueries({ queryKey: ["graph", docId] });
   };
 
+  const llmOn = cfg.data?.llm_configured ?? false;
+
+  const handleSectionFinished = useCallback(
+    (anchor: string, label: string) => {
+      if (!checkpointsOn || !llmOn) return;
+      if (offeredSections.current.has(anchor)) return;
+      offeredSections.current.add(anchor);
+      // The chip is guarded in render against showing while a panel is open,
+      // so we can just queue the newest finished section unconditionally.
+      setPendingCheckpoint({ anchor, label });
+    },
+    [checkpointsOn, llmOn],
+  );
+
+  const toggleCheckpoints = () => {
+    setCheckpointsOn((on) => {
+      const next = !on;
+      localStorage.setItem("verity:checkpoints", next ? "on" : "off");
+      if (!next) setPendingCheckpoint(null);
+      return next;
+    });
+  };
+
   if (doc.isError || html.isError || graph.isError) {
     const err = (doc.error || html.error || graph.error) as Error;
     return (
@@ -120,6 +159,17 @@ export default function Reader() {
             onOpen={reopenChat}
           />
         )}
+        {llmOn && (
+          <button
+            type="button"
+            className={`notation-toggle-btn ${checkpointsOn ? "active" : ""}`}
+            onClick={toggleCheckpoints}
+            aria-pressed={checkpointsOn}
+            title="Offer a quick active-recall check when you finish a section"
+          >
+            Checkpoints
+          </button>
+        )}
         {symbolCount > 0 && (
           <button
             type="button"
@@ -136,9 +186,10 @@ export default function Reader() {
           docId={docId!}
           html={html.data}
           nodes={graph.data.nodes}
-          llmConfigured={cfg.data?.llm_configured ?? false}
+          llmConfigured={llmOn}
           onJump={handleJump}
           onVisibleSectionsChange={setVisibleSections}
+          onSectionFinished={handleSectionFinished}
         />
         {notationOpen && (
           <NotationSheet
@@ -168,6 +219,24 @@ export default function Reader() {
           onJumpToPassage={(c) =>
             c.section_anchor && dive(c.section_label || "passage", c.section_anchor)
           }
+        />
+      )}
+      {pendingCheckpoint && !activeCheckpoint && (
+        <CheckpointChip
+          label={pendingCheckpoint.label}
+          onOpen={() => {
+            setActiveCheckpoint(pendingCheckpoint);
+            setPendingCheckpoint(null);
+          }}
+          onDismiss={() => setPendingCheckpoint(null)}
+        />
+      )}
+      {activeCheckpoint && (
+        <CheckpointPanel
+          docId={docId!}
+          sectionAnchor={activeCheckpoint.anchor}
+          sectionLabel={activeCheckpoint.label}
+          onClose={() => setActiveCheckpoint(null)}
         />
       )}
     </div>

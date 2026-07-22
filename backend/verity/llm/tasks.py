@@ -9,6 +9,8 @@ guessing. Generated answers are always shown flagged as AI, so world-knowledge
 explanation and paper-grounded quotes never get confused.
 """
 
+import re
+
 from .base import LLMProvider
 
 # Machine sentinel the model emits when it can't help — robust to detect,
@@ -118,3 +120,60 @@ def define_symbol(
         f"What does {symbol} denote?"
     )
     return provider.generate(_SYMBOL_SYSTEM, prompt, max_tokens=80)
+
+
+# --- "Did it land" checkpoints --------------------------------------------
+
+_CHECKPOINT_SYSTEM = (
+    "You help a reader check whether a section landed — active recall, not a "
+    "summary. Given the section text and the reader's from-memory recall, list the "
+    "2 or 3 load-bearing key points of the section (drawn ONLY from the section "
+    "text — never invent one; one clear sentence each), and for each judge whether "
+    "the recall captured it: hit (clearly got it), partial (touched it but fuzzy), "
+    "or miss (didn't get it). If the recall is empty, mark them all miss.\n"
+    "Reply in EXACTLY this format — 2 or 3 POINT lines, then one FEEDBACK line, and "
+    "nothing else. Example:\n"
+    "POINT hit: Self-attention lets every position attend to every other in one step.\n"
+    "POINT miss: The motivation is parallelism — RNNs must process tokens in sequence.\n"
+    "FEEDBACK: You nailed the mechanism; revisit why it matters for training speed.\n"
+    "Now do the same for this reader. You may use $...$ LaTeX for math."
+)
+
+_POINT_RE = re.compile(r"^POINT\s+(hit|partial|miss)\s*:\s*(.+)$", re.IGNORECASE)
+
+
+def _parse_checkpoint(raw: str) -> dict:
+    """Line-based, not JSON — LaTeX backslashes in the key points would make
+    JSON invalid, and a checkpoint must never break on a formatting hiccup."""
+    feedback = ""
+    points: list[dict] = []
+    for line in raw.splitlines():
+        line = line.strip().lstrip("`").strip()
+        if line[:9].upper() == "FEEDBACK:":
+            feedback = line[9:].strip()
+            continue
+        m = _POINT_RE.match(line)
+        if m:
+            points.append({"point": m.group(2).strip(), "status": m.group(1).lower()})
+    if not feedback and not points:
+        feedback = raw.strip()[:400]
+    return {"key_points": points, "feedback": feedback}
+
+
+def assess_recall(
+    provider: LLMProvider,
+    *,
+    section_text: str,
+    answer: str,
+    section_label: str = "",
+    title: str = "",
+) -> dict:
+    attempt = answer.strip() or "(the reader chose to just see the key points)"
+    prompt = (
+        f'Paper: "{title}"\n'
+        f"Section {section_label} text:\n\"\"\"\n{section_text.strip()}\n\"\"\"\n\n"
+        f'The reader\'s recall, from memory: "{attempt}"\n\n'
+        "Assess whether it landed."
+    )
+    raw = provider.generate(_CHECKPOINT_SYSTEM, prompt, max_tokens=600)
+    return _parse_checkpoint(raw)

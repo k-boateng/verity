@@ -94,3 +94,18 @@ def symbol_excerpts(html_path: str, label: str, limit: int = 4) -> list[str]:
         if len(excerpts) >= limit:
             break
     return excerpts
+
+
+def section_text(html_path: str, anchor: str, limit: int = 6000) -> str:
+    """The prose of one section, pulled from the stored rendering. This is the
+    grounding source for a checkpoint — key points are drawn from here, never
+    invented."""
+    path = Path(html_path) if html_path else None
+    if path is None or not path.exists():
+        return ""
+    soup = BeautifulSoup(path.read_text(encoding="utf-8"), "lxml")
+    el = soup.find(id=anchor)
+    if el is None:
+        return ""
+    text = re.sub(r"\s+", " ", el.get_text(" ", strip=True)).strip()
+    return text[:limit]

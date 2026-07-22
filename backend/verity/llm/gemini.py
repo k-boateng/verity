@@ -26,10 +26,14 @@ class GeminiProvider(LLMProvider):
     def _config(self, system: str, max_tokens: int):
         from google.genai import types
 
+        # gemini-flash is a thinking model and its reasoning counts against
+        # max_output_tokens, so the ceiling must leave room for thinking on top
+        # of the visible answer — otherwise the reply gets truncated. Callers
+        # pass the size of the *answer* they want; we add headroom for thinking.
         return types.GenerateContentConfig(
             system_instruction=system,
             temperature=0.2,
-            max_output_tokens=max_tokens,
+            max_output_tokens=max_tokens + 1024,
         )
 
     def generate(self, system: str, prompt: str, max_tokens: int = 600) -> str:

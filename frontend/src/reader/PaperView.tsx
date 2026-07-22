@@ -10,6 +10,7 @@ interface Props {
   llmConfigured: boolean;
   onJump: (node: GraphNode) => void;
   onVisibleSectionsChange?: (visible: Set<string>) => void;
+  onSectionFinished?: (anchor: string, label: string) => void;
 }
 
 interface HoverState {
@@ -30,6 +31,7 @@ export default function PaperView({
   llmConfigured,
   onJump,
   onVisibleSectionsChange,
+  onSectionFinished,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<HoverState | null>(null);
@@ -160,6 +162,57 @@ export default function PaperView({
       window.removeEventListener("resize", onScroll);
     };
   }, [html, onVisibleSectionsChange]);
+
+  // A checkpoint fires when a top-level section's end scrolls off the top —
+  // you've finished reading it. We seed the already-past sections 1.3s in (so
+  // a restored deep scroll position doesn't fire a backlog) and only report
+  // sections crossed during this session, once each.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !onSectionFinished) return;
+    const sections = Array.from(
+      container.querySelectorAll<HTMLElement>(
+        "section.ltx_section[id], section.ltx_appendix[id]",
+      ),
+    );
+    if (sections.length === 0) return;
+
+    const THRESHOLD = 120;
+    const isPast = (el: HTMLElement) => el.getBoundingClientRect().bottom < THRESHOLD;
+    const finished = new Set<string>();
+    let active = false;
+
+    const labelFor = (s: HTMLElement) => {
+      const title = s.querySelector(":scope > .ltx_title");
+      const tag = title?.querySelector(".ltx_tag")?.textContent?.trim().replace(/\.\s*$/, "");
+      if (tag) return `§${tag}`;
+      return title?.textContent?.trim().slice(0, 40) || s.id;
+    };
+
+    const seed = window.setTimeout(() => {
+      sections.forEach((s) => {
+        if (isPast(s)) finished.add(s.id);
+      });
+      active = true;
+    }, 1300);
+
+    const check = () => {
+      if (!active) return;
+      for (const s of sections) {
+        if (finished.has(s.id)) continue;
+        if (isPast(s)) {
+          finished.add(s.id);
+          onSectionFinished(s.id, labelFor(s));
+        }
+      }
+    };
+
+    window.addEventListener("scroll", check, { passive: true });
+    return () => {
+      window.clearTimeout(seed);
+      window.removeEventListener("scroll", check);
+    };
+  }, [html, onSectionFinished]);
 
   return (
     <div className="paper-container">

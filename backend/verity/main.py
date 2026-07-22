@@ -319,6 +319,45 @@ def explain_equation(doc_id: int, req: ExplainEquationRequest) -> dict:
     }
 
 
+# --- "Did it land" checkpoints --------------------------------------------
+
+class CheckpointRequest(BaseModel):
+    section_anchor: str
+    section_label: str = ""
+    answer: str = ""
+
+
+@app.post("/api/documents/{doc_id}/checkpoint")
+def checkpoint(doc_id: int, req: CheckpointRequest) -> dict:
+    provider = get_provider()
+    if not provider.is_configured():
+        raise HTTPException(status_code=409, detail="no model configured")
+
+    session = db.get_session()
+    try:
+        doc = _get_doc(session, doc_id)
+        html_path = doc.html_path
+        title = doc.title
+    finally:
+        session.close()
+
+    text = retrieval.section_text(html_path, req.section_anchor)
+    if not text:
+        raise HTTPException(status_code=422, detail="could not read that section")
+
+    try:
+        result = llm_tasks.assess_recall(
+            provider,
+            section_text=text,
+            answer=req.answer,
+            section_label=req.section_label,
+            title=title,
+        )
+    except Exception as exc:
+        return {"key_points": [], "feedback": _friendly_error(exc), "error": True}
+    return result
+
+
 # --- Anchored chat (persisted server-side) --------------------------------
 
 _CHAT_SYSTEM = (
