@@ -142,6 +142,34 @@
   margin: 1.6em 0;
 }
 
+/* PDF-extracted tables can be wide — scroll them instead of the page */
+.paper-body .pdf-table {
+  overflow-x: auto;
+}
+
+.paper-body .pdf-table table {
+  border-collapse: collapse;
+  font-size: 0.86rem;
+  font-family: var(--sans);
+}
+
+.paper-body .pdf-table td,
+.paper-body .pdf-table th {
+  border: 1px solid var(--hairline);
+  padding: 4px 9px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+/* PDF figures are page-extracted rasters; keep them from dominating */
+.paper-body figure.ltx_figure img {
+  display: block;
+  margin: 0 auto;
+  max-height: 620px;
+  width: auto;
+  max-width: 100%;
+}
+
 .paper-body .ltx_figure img {
   max-width: 100%;
   height: auto;

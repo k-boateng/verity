@@ -135,7 +135,11 @@ def ingest_pdf(session: Session, filename: str, pdf_bytes: bytes) -> Document:
         doc_dir = config.document_dir(key)
         (doc_dir / "source.pdf").write_bytes(pdf_bytes)
 
-        processed = pdf_mod.extract(pdf_bytes)
+        processed = pdf_mod.extract(
+            pdf_bytes,
+            assets_dir=doc_dir / "assets",
+            asset_url_prefix=f"/api/assets/{key}",
+        )
         doc.title = processed.title or filename or key
         doc.authors = processed.authors
 
