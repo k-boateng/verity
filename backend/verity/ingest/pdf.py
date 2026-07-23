@@ -2,10 +2,13 @@
 
 PDF is a layout format, not a semantic one, so this is honest best-effort. We
 recover the title, a clean byline, a section structure with paragraphs, figures,
-tables, and the reference list with [N]-style citations linked back to it —
-enough for the reader, Ask, the anchored chat, and checkpoints to all work.
-Fine cross-references and math are out of scope: without a LaTeX source they're
-glyph soup, and the trust layer would rather show nothing than a guess.
+and the reference list with [N]-style citations linked back to it — enough for
+the reader, Ask, the anchored chat, and checkpoints to all work.
+
+Tables and display equations don't survive text extraction (glyph soup, mangled
+grids), so instead of guessing we crop those regions straight from the page as
+crisp images. Prose stays selectable text; the hard-to-reconstruct bits render
+as pictures of the real thing. Inline math in prose is left as best-effort text.
 
 The output is the same ProcessedHtml shape the arXiv/LaTeXML pass produces, so
 everything downstream (graph build, storage, the whole reader) is identical.
@@ -39,6 +42,7 @@ class Element:
     size: float = 0.0
     bold: bool = False
     img_src: str = ""
+    img_w: float = 0.0  # intended display width in CSS px (region's point width)
     table_rows: list = field(default_factory=list)
 
     @property
@@ -110,7 +114,7 @@ def _collect_elements(
         page = doc.load_page(pno)
         width = page.rect.width
 
-        tables = _extract_tables(page, pno)
+        tables = _extract_tables(page, pno, assets_dir, asset_url_prefix)
         table_boxes = [box for _, box in tables]
         page_elements: list[Element] = [t for t, _ in tables]
 
@@ -123,18 +127,37 @@ def _collect_elements(
             if _inside_any_table(b["bbox"], table_boxes):
                 continue
             text, size, bold = _block_text(b)
-            if text:
-                page_elements.append(
-                    Element(
-                        kind="text",
-                        page=pno,
-                        y=b["bbox"][1],
-                        x0=b["bbox"][0],
-                        text=text,
-                        size=size,
-                        bold=bold,
-                    )
+            if not text:
+                continue
+            # Display equations are glyph-soup as text — crop them from the page
+            # as a crisp image instead, so they render correctly.
+            if assets_dir is not None and _is_display_equation(text, b["bbox"], width):
+                src = _rasterize_region(
+                    page, b["bbox"], assets_dir, asset_url_prefix, f"eq-p{pno}-{round(b['bbox'][1])}"
                 )
+                if src:
+                    page_elements.append(
+                        Element(
+                            kind="image",
+                            page=pno,
+                            y=b["bbox"][1],
+                            x0=b["bbox"][0],
+                            img_src=src,
+                            img_w=b["bbox"][2] - b["bbox"][0],
+                        )
+                    )
+                    continue
+            page_elements.append(
+                Element(
+                    kind="text",
+                    page=pno,
+                    y=b["bbox"][1],
+                    x0=b["bbox"][0],
+                    text=text,
+                    size=size,
+                    bold=bold,
+                )
+            )
 
         def order_key(e: Element) -> tuple:
             column = 0 if e.x0 < width * 0.5 else 1
@@ -145,24 +168,81 @@ def _collect_elements(
     return elements
 
 
-def _extract_tables(page: fitz.Page, pno: int) -> list[tuple[Element, tuple]]:
+def _rasterize_region(
+    page: fitz.Page, bbox, assets_dir: Path | None, asset_url_prefix: str, name: str
+) -> str:
+    """Render a region of the page to a crisp PNG (2x) — used for tables and
+    display equations that don't survive text extraction."""
+    if assets_dir is None:
+        return ""
+    try:
+        rect = fitz.Rect(bbox) + (-3, -3, 3, 3)
+        pix = page.get_pixmap(clip=rect, matrix=fitz.Matrix(2, 2))
+        assets_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"{name}.png"
+        (assets_dir / filename).write_bytes(pix.tobytes("png"))
+        return f"{asset_url_prefix}/{filename}"
+    except Exception:
+        return ""
+
+
+_MATH_CHARS = set("=+−-×÷∑∫∏√≤≥≈≠∞∂∇^_{}|/⋅·→←↦∈∉⊂⊆∪∩⊗⊕≅∝∀∃±∓" + "αβγδεζηθικλμνξπρστυφχψωΓΔΘΛΞΠΣΦΨΩ")
+
+
+def _is_display_equation(text: str, bbox, page_width: float) -> bool:
+    """A short, isolated, math-heavy block — a display equation. Conservative on
+    purpose: better to leave a line as text than to rasterize real prose."""
+    compact = text.replace(" ", "")
+    if len(compact) < 3 or len(text) > 240 or len(text.split()) > 28:
+        return False
+    letters = sum(c.isalpha() and c.isascii() for c in compact)
+    total = len(compact)
+    math = sum(c in _MATH_CHARS for c in text)
+    has_eqnum = bool(re.search(r"\(\d+\)\s*$", text))
+    alpha_ratio = letters / total
+    math_ratio = math / total
+    return alpha_ratio < 0.55 and (math_ratio > 0.18 or (has_eqnum and math_ratio > 0.08))
+
+
+def _looks_like_real_table(rows: list) -> bool:
+    """A real data table has many short cells (numbers, short labels). A text
+    column mis-detected as a table has a few long, sentence-like cells — reject
+    those so we don't hide prose behind an image."""
+    cells = [str(c).strip() for r in rows for c in r if c and str(c).strip()]
+    if len(cells) < 4:
+        return False
+    avg_len = sum(len(c) for c in cells) / len(cells)
+    short = sum(1 for c in cells if len(c) <= 25)
+    return avg_len < 45 and short / len(cells) > 0.55
+
+
+def _extract_tables(
+    page: fitz.Page, pno: int, assets_dir: Path | None, asset_url_prefix: str
+) -> list[tuple[Element, tuple]]:
     out: list[tuple[Element, tuple]] = []
     try:
         finder = page.find_tables()
     except Exception:
         return out
-    for tbl in getattr(finder, "tables", []):
+    for i, tbl in enumerate(getattr(finder, "tables", [])):
         try:
             rows = tbl.extract()
             box = tuple(tbl.bbox)
         except Exception:
             continue
-        # keep only tables with real structure
         if not rows or len(rows) < 2 or all(len(r) < 2 for r in rows):
             continue
-        out.append(
-            (Element(kind="table", page=pno, y=box[1], x0=box[0], table_rows=rows), box)
-        )
+        if not _looks_like_real_table(rows):
+            continue  # a text column mis-detected as a table — leave it as prose
+        # A cropped image of the real table beats a mangled HTML reconstruction.
+        src = _rasterize_region(page, box, assets_dir, asset_url_prefix, f"tbl-p{pno}-{i}")
+        if src:
+            element = Element(
+                kind="image", page=pno, y=box[1], x0=box[0], img_src=src, img_w=box[2] - box[0]
+            )
+        else:
+            element = Element(kind="table", page=pno, y=box[1], x0=box[0], table_rows=rows)
+        out.append((element, box))
     return out
 
 
@@ -338,7 +418,7 @@ def _segment(
         if e.kind == "text":
             current.content.append({"kind": "text", "text": e.text})
         elif e.kind == "image":
-            current.content.append({"kind": "image", "src": e.img_src})
+            current.content.append({"kind": "image", "src": e.img_src, "w": e.img_w})
         elif e.kind == "table":
             current.content.append({"kind": "table", "rows": e.table_rows})
 
@@ -519,8 +599,14 @@ def _render(
                 body = _link_citations(item["text"], references, section.anchor, occurrences)
                 parts.append(f'<div class="ltx_para"><p class="ltx_p">{body}</p></div>')
             elif item["kind"] == "image":
+                src = html_lib.escape(item["src"])
+                # rasterized crops render at 2x; set display width to the real
+                # region width so equations/tables aren't doubled in size
+                w = item.get("w") or 0
+                style = f' style="width:{round(w)}px"' if w else ""
+                cls = "ltx_figure pdf-crop" if "/tbl-" in src or "/eq-" in src else "ltx_figure"
                 parts.append(
-                    f'<figure class="ltx_figure"><img src="{html_lib.escape(item["src"])}" loading="lazy" alt=""/></figure>'
+                    f'<figure class="{cls}"><img src="{src}"{style} loading="lazy" alt=""/></figure>'
                 )
             elif item["kind"] == "table":
                 parts.append(_render_table(item["rows"]))

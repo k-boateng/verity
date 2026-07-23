@@ -170,6 +170,19 @@
   max-width: 100%;
 }
 
+/* Cropped tables/equations: display at their real width (the 2x raster stays
+   crisp), never height-capped, and scrollable if wider than the column */
+.paper-body figure.pdf-crop {
+  overflow-x: auto;
+  text-align: center;
+}
+
+.paper-body figure.pdf-crop img {
+  max-height: none;
+  max-width: 100%;
+  height: auto;
+}
+
 .paper-body .ltx_figure img {
   max-width: 100%;
   height: auto;
