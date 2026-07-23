@@ -25,10 +25,10 @@ CORS_ORIGINS = [
     if o.strip()
 ]
 
-# LLM layer. The provider is deliberately swappable. Cerebras is the default —
-# 1M free tokens/day and strong open models (Llama 3.3 70B, Qwen3). Groq and
-# Gemini are drop-in alternatives via VERITY_LLM_PROVIDER.
-LLM_PROVIDER = os.getenv("VERITY_LLM_PROVIDER", "cerebras")
+# LLM layer. The provider is deliberately swappable. Groq is the default —
+# genuinely free (no card) and Llama 3.3 70B is a clear step up from Gemini
+# Flash. Cerebras and Gemini are drop-in alternatives via VERITY_LLM_PROVIDER.
+LLM_PROVIDER = os.getenv("VERITY_LLM_PROVIDER", "groq")
 CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")

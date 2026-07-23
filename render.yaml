@@ -17,15 +17,15 @@ services:
       mountPath: /app/data
       sizeGB: 1
     envVars:
-      - key: CEREBRAS_API_KEY # free key from cloud.cerebras.ai
+      - key: GROQ_API_KEY # free key from console.groq.com
         sync: false
       - key: DATABASE_URL # Supabase connection string (postgresql://...)
         sync: false
       - key: VERITY_CORS_ORIGINS # your deployed frontend URL, e.g. https://verity.vercel.app
         sync: false
       - key: VERITY_LLM_PROVIDER
-        value: cerebras
+        value: groq
       - key: VERITY_LLM_MODEL
-        value: llama-3.3-70b
+        value: llama-3.3-70b-versatile
       - key: VERITY_PDF_MAX_PAGES
         value: "50"

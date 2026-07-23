@@ -30,15 +30,15 @@ To enable explanations (the "Ask" gesture) and the anchored chat, add a model
 API key in `backend/.env`:
 
 ```
-CEREBRAS_API_KEY=your_key_here
+GROQ_API_KEY=your_key_here
 ```
 
-Get a free key at https://cloud.cerebras.ai (1M tokens/day, no card). Without a
-key, the reader and retrieval-grounded resolution still work; only generated
-explanations are disabled.
+Get a free key at https://console.groq.com (no card; runs Llama 3.3 70B).
+Without a key, the reader and retrieval-grounded resolution still work; only
+generated explanations are disabled.
 
-To use a different provider, set `VERITY_LLM_PROVIDER` to `groq` or `gemini`
-(with `GROQ_API_KEY` / `GEMINI_API_KEY`); pick a specific model with
+To use a different provider, set `VERITY_LLM_PROVIDER` to `cerebras` or `gemini`
+(with `CEREBRAS_API_KEY` / `GEMINI_API_KEY`); pick a specific model with
 `VERITY_LLM_MODEL`. No code changes — same interface.
 
 Frontend (Node 18+):
