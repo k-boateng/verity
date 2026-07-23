@@ -18,7 +18,7 @@ you mostly paste values.
 1. Push this repo to GitHub (done).
 2. Render → **New +** → **Blueprint** → pick this repo. It reads `render.yaml`.
 3. Set the secret env vars when prompted:
-   - `GEMINI_API_KEY` — your key from aistudio.google.com
+   - `CEREBRAS_API_KEY` — your free key from cloud.cerebras.ai
    - `DATABASE_URL` — the Supabase URI from step 1
    - `VERITY_CORS_ORIGINS` — your Vercel URL (fill this after step 3, e.g.
      `https://verity.vercel.app`); redeploy once you have it.

@@ -25,14 +25,21 @@ CORS_ORIGINS = [
     if o.strip()
 ]
 
-# LLM layer. The provider is deliberately swappable; Gemini's free tier is the
-# development default, with a specific model chosen via VERITY_LLM_MODEL.
-LLM_PROVIDER = os.getenv("VERITY_LLM_PROVIDER", "gemini")
-# "…-latest" tracks the current Gemini flash model, so a specific model being
-# retired doesn't break the app. Pin a fixed model via VERITY_LLM_MODEL if you
-# want reproducibility.
-LLM_MODEL = os.getenv("VERITY_LLM_MODEL", "gemini-flash-latest")
+# LLM layer. The provider is deliberately swappable. Cerebras is the default —
+# 1M free tokens/day and strong open models (Llama 3.3 70B, Qwen3). Groq and
+# Gemini are drop-in alternatives via VERITY_LLM_PROVIDER.
+LLM_PROVIDER = os.getenv("VERITY_LLM_PROVIDER", "cerebras")
+CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY", "")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+
+_DEFAULT_MODELS = {
+    "cerebras": "llama-3.3-70b",
+    "groq": "llama-3.3-70b-versatile",
+    "gemini": "gemini-flash-latest",
+}
+# Pin a specific model via VERITY_LLM_MODEL; otherwise use the provider default.
+LLM_MODEL = os.getenv("VERITY_LLM_MODEL") or _DEFAULT_MODELS.get(LLM_PROVIDER, "llama-3.3-70b")
 
 # PDF ingestion limits. Verity targets dense papers (≤~40pp); the cap draws the
 # line at books/theses, where text-only extraction and one-HTML rendering

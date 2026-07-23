@@ -1,14 +1,24 @@
 from .. import config
 from .base import LLMProvider, NullProvider
 from .gemini import GeminiProvider
+from .openai_compat import OpenAICompatProvider
 
 _provider: LLMProvider | None = None
+
+_ENDPOINTS = {
+    "cerebras": ("https://api.cerebras.ai/v1", lambda: config.CEREBRAS_API_KEY),
+    "groq": ("https://api.groq.com/openai/v1", lambda: config.GROQ_API_KEY),
+}
 
 
 def get_provider() -> LLMProvider:
     global _provider
     if _provider is None:
-        if config.LLM_PROVIDER == "gemini":
+        name = config.LLM_PROVIDER
+        if name in _ENDPOINTS:
+            base_url, key_getter = _ENDPOINTS[name]
+            _provider = OpenAICompatProvider(name, base_url, key_getter(), config.LLM_MODEL)
+        elif name == "gemini":
             _provider = GeminiProvider(config.GEMINI_API_KEY, config.LLM_MODEL)
         else:
             _provider = NullProvider()
@@ -21,4 +31,11 @@ def set_provider(provider: LLMProvider | None) -> None:
     _provider = provider
 
 
-__all__ = ["LLMProvider", "NullProvider", "GeminiProvider", "get_provider", "set_provider"]
+__all__ = [
+    "LLMProvider",
+    "NullProvider",
+    "GeminiProvider",
+    "OpenAICompatProvider",
+    "get_provider",
+    "set_provider",
+]

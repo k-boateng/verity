@@ -150,7 +150,7 @@ function ResolutionCard({
       <div className="resolution-card">
         <div className="rc-body">
           The paper doesn’t define this, and no model is connected yet to explain it.
-          {!llmConfigured && " Add a GEMINI_API_KEY to enable explanations."}
+          {!llmConfigured && " Add a model API key to enable explanations."}
         </div>
       </div>
     );

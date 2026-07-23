@@ -117,6 +117,21 @@ def test_config_endpoint_reports_provider(client):
     assert client.get("/api/config").json()["llm_configured"] is False
 
 
+def test_openai_compat_provider_shape():
+    from verity.llm import OpenAICompatProvider
+    from verity.llm.openai_compat import _strip_think
+
+    p = OpenAICompatProvider("cerebras", "https://api.cerebras.ai/v1/", "", "llama-3.3-70b")
+    assert p.is_configured() is False  # no key
+    assert p.name == "cerebras"
+    payload = p._payload("sys", "hi", 100, stream=True)
+    assert payload["model"] == "llama-3.3-70b"
+    assert payload["stream"] is True
+    assert payload["messages"][0]["role"] == "system"
+    # reasoning scratch-work is stripped from answers
+    assert _strip_think("<think>hmm</think>The answer.") == "The answer."
+
+
 def test_chat_persists_and_reopens(client, doc):
     llm.set_provider(FakeProvider(reply="Because scaling keeps gradients stable."))
 

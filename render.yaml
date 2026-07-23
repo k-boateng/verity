@@ -17,13 +17,15 @@ services:
       mountPath: /app/data
       sizeGB: 1
     envVars:
-      - key: GEMINI_API_KEY
+      - key: CEREBRAS_API_KEY # free key from cloud.cerebras.ai
         sync: false
       - key: DATABASE_URL # Supabase connection string (postgresql://...)
         sync: false
       - key: VERITY_CORS_ORIGINS # your deployed frontend URL, e.g. https://verity.vercel.app
         sync: false
+      - key: VERITY_LLM_PROVIDER
+        value: cerebras
       - key: VERITY_LLM_MODEL
-        value: gemini-flash-latest
+        value: llama-3.3-70b
       - key: VERITY_PDF_MAX_PAGES
         value: "50"
