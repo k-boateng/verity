@@ -1,0 +1,29 @@
+# Render blueprint for the Verity backend.
+# Deploy: push to GitHub, then in Render "New +" → "Blueprint" and pick this repo.
+# Fill the env vars marked sync:false in the Render dashboard (they're secrets).
+services:
+  - type: web
+    name: verity-backend
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /api/config
+    # A persistent disk keeps ingested papers across restarts. Disks need a
+    # paid instance; on the free plan, drop this block and re-ingest after a
+    # restart (arXiv re-fetches; PDFs re-upload). See HOSTING.md.
+    disk:
+      name: verity-data
+      mountPath: /app/data
+      sizeGB: 1
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DATABASE_URL # Supabase connection string (postgresql://...)
+        sync: false
+      - key: VERITY_CORS_ORIGINS # your deployed frontend URL, e.g. https://verity.vercel.app
+        sync: false
+      - key: VERITY_LLM_MODEL
+        value: gemini-flash-latest
+      - key: VERITY_PDF_MAX_PAGES
+        value: "50"

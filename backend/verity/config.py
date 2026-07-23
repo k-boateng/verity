@@ -10,6 +10,20 @@ DATA_DIR = Path(os.getenv("VERITY_DATA_DIR", BACKEND_DIR / "data"))
 DOCUMENTS_DIR = DATA_DIR / "documents"
 
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DATA_DIR / 'verity.db'}")
+# Some hosts (Render, Heroku) hand out "postgres://"; SQLAlchemy needs the
+# "postgresql://" scheme.
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+# Browser origins allowed to call the API. In production set VERITY_CORS_ORIGINS
+# to the deployed frontend URL(s), comma-separated.
+CORS_ORIGINS = [
+    o.strip()
+    for o in os.getenv(
+        "VERITY_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+    ).split(",")
+    if o.strip()
+]
 
 # LLM layer. The provider is deliberately swappable; Gemini's free tier is the
 # development default, with a specific model chosen via VERITY_LLM_MODEL.

@@ -1,4 +1,4 @@
-export interface DocumentSummary {
+﻿export interface DocumentSummary {
   id: number;
   arxiv_id: string;
   source: "arxiv" | "pdf";
@@ -50,6 +50,10 @@ export interface GraphResponse {
   edges: GraphEdge[];
 }
 
+// Empty in dev (Vite proxies /api to the backend); in production set
+// VITE_API_BASE to the deployed backend URL for cross-origin calls.
+const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
+
 async function handle<T>(resp: Response): Promise<T> {
   if (!resp.ok) {
     let detail = resp.statusText;
@@ -66,10 +70,10 @@ async function handle<T>(resp: Response): Promise<T> {
 
 export const api = {
   listDocuments: () =>
-    fetch("/api/documents").then((r) => handle<DocumentSummary[]>(r)),
+    fetch(API_BASE + "/api/documents").then((r) => handle<DocumentSummary[]>(r)),
 
   ingest: (arxivId: string) =>
-    fetch("/api/documents", {
+    fetch(API_BASE + "/api/documents", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ arxiv_id: arxivId }),
@@ -78,16 +82,16 @@ export const api = {
   uploadPdf: (file: File) => {
     const form = new FormData();
     form.append("file", file);
-    return fetch("/api/documents/pdf", { method: "POST", body: form }).then((r) =>
+    return fetch(API_BASE + "/api/documents/pdf", { method: "POST", body: form }).then((r) =>
       handle<DocumentSummary>(r),
     );
   },
 
   getDocument: (docId: string | number) =>
-    fetch(`/api/documents/${docId}`).then((r) => handle<DocumentSummary>(r)),
+    fetch(`${API_BASE}/api/documents/${docId}`).then((r) => handle<DocumentSummary>(r)),
 
   deleteDocument: (docId: number) =>
-    fetch(`/api/documents/${docId}`, { method: "DELETE" }).then((r) =>
+    fetch(`${API_BASE}/api/documents/${docId}`, { method: "DELETE" }).then((r) =>
       handle<{ deleted: number }>(r),
     ),
 
@@ -95,61 +99,61 @@ export const api = {
     docId: string | number,
     body: { section_anchor: string; section_label?: string; answer?: string },
   ) =>
-    fetch(`/api/documents/${docId}/checkpoint`, {
+    fetch(`${API_BASE}/api/documents/${docId}/checkpoint`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }).then((r) => handle<CheckpointResult>(r)),
 
   getHtml: async (docId: string | number): Promise<string> => {
-    const resp = await fetch(`/api/documents/${docId}/html`);
+    const resp = await fetch(`${API_BASE}/api/documents/${docId}/html`);
     if (!resp.ok) throw new Error(`document not ready (${resp.status})`);
     return resp.text();
   },
 
   getGraph: (docId: string | number) =>
-    fetch(`/api/documents/${docId}/nodes`).then((r) => handle<GraphResponse>(r)),
+    fetch(`${API_BASE}/api/documents/${docId}/nodes`).then((r) => handle<GraphResponse>(r)),
 
-  getConfig: () => fetch("/api/config").then((r) => handle<{ llm_configured: boolean }>(r)),
+  getConfig: () => fetch(API_BASE + "/api/config").then((r) => handle<{ llm_configured: boolean }>(r)),
 
   explainEquation: (docId: string | number, req: { latex: string; context?: string; symbols?: string[] }) =>
-    fetch(`/api/documents/${docId}/explain-equation`, {
+    fetch(`${API_BASE}/api/documents/${docId}/explain-equation`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req),
     }).then((r) => handle<{ mode: ResolveMode; content: string }>(r)),
 
   defineSymbol: (docId: string | number, nodeId: number) =>
-    fetch(`/api/documents/${docId}/nodes/${nodeId}/define`, { method: "POST" }).then((r) =>
+    fetch(`${API_BASE}/api/documents/${docId}/nodes/${nodeId}/define`, { method: "POST" }).then((r) =>
       handle<{ id: number; excerpt: string; data: GraphNode["data"] }>(r),
     ),
 
   resolve: (docId: string | number, req: ResolveRequest) =>
-    fetch(`/api/documents/${docId}/resolve`, {
+    fetch(`${API_BASE}/api/documents/${docId}/resolve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req),
     }).then((r) => handle<ResolveResult>(r)),
 
   listChats: (docId: string | number) =>
-    fetch(`/api/documents/${docId}/chats`).then((r) => handle<ChatSummary[]>(r)),
+    fetch(`${API_BASE}/api/documents/${docId}/chats`).then((r) => handle<ChatSummary[]>(r)),
 
   openChat: (docId: string | number, seed: ChatCreateRequest) =>
-    fetch(`/api/documents/${docId}/chats`, {
+    fetch(`${API_BASE}/api/documents/${docId}/chats`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(seed),
     }).then((r) => handle<Chat>(r)),
 
   getChat: (chatId: number) =>
-    fetch(`/api/chats/${chatId}`).then((r) => handle<Chat>(r)),
+    fetch(`${API_BASE}/api/chats/${chatId}`).then((r) => handle<Chat>(r)),
 
   sendChatMessage: async function* (
     chatId: number,
     content: string,
     signal?: AbortSignal,
   ): AsyncGenerator<string> {
-    const resp = await fetch(`/api/chats/${chatId}/message`, {
+    const resp = await fetch(`${API_BASE}/api/chats/${chatId}/message`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content }),
@@ -232,3 +236,4 @@ export interface CheckpointResult {
   feedback: string;
   error?: boolean;
 }
+
