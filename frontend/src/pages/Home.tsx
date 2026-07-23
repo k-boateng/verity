@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { DocumentSummary } from "../api";
 import { api } from "../api";
@@ -24,6 +24,9 @@ export default function Home() {
 
   const docs = useQuery({ queryKey: ["documents"], queryFn: api.listDocuments });
 
+  const [dragging, setDragging] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+
   const ingest = useMutation({
     mutationFn: api.ingest,
     onSuccess: (doc) => {
@@ -31,6 +34,21 @@ export default function Home() {
       if (doc.status === "ready") navigate(`/read/${doc.id}`);
     },
   });
+
+  const upload = useMutation({
+    mutationFn: api.uploadPdf,
+    onSuccess: (doc) => {
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+      if (doc.status === "ready") navigate(`/read/${doc.id}`);
+    },
+  });
+
+  const busy = ingest.isPending || upload.isPending;
+
+  const onFiles = (files: FileList | null) => {
+    const file = files?.[0];
+    if (file && !busy) upload.mutate(file);
+  };
 
   return (
     <div className="home">
@@ -56,12 +74,44 @@ export default function Home() {
             {ingest.isPending ? "Fetching & parsing…" : "Open"}
           </button>
         </form>
-        {ingest.isPending && (
+        <div
+          className={`dropzone ${dragging ? "dragging" : ""} ${busy ? "busy" : ""}`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragging(false);
+            onFiles(e.dataTransfer.files);
+          }}
+          onClick={() => !busy && fileInput.current?.click()}
+          role="button"
+          tabIndex={0}
+        >
+          <input
+            ref={fileInput}
+            type="file"
+            accept="application/pdf,.pdf"
+            hidden
+            onChange={(e) => onFiles(e.target.files)}
+          />
+          <span className="dropzone-label">
+            {upload.isPending ? "Reading your PDF…" : "…or drop a PDF here"}
+          </span>
+          <span className="dropzone-sub">any paper — arXiv or not · up to 50 pages</span>
+        </div>
+
+        {(ingest.isPending || upload.isPending) && (
           <p className="hint">
-            Fetching the paper and building its structure — usually well under a minute.
+            {upload.isPending
+              ? "Extracting the structure from your PDF — a few seconds."
+              : "Fetching the paper and building its structure — usually well under a minute."}
           </p>
         )}
         {ingest.isError && <p className="error">{(ingest.error as Error).message}</p>}
+        {upload.isError && <p className="error">{(upload.error as Error).message}</p>}
       </header>
 
       <section className="library">
@@ -107,7 +157,7 @@ function LibraryRow({ doc, onRetry }: { doc: DocumentSummary; onRetry: () => voi
           <span className={`status-pill status-${ready ? "ready" : failed ? "failed" : "pending"}`}>
             {ready ? "ready" : failed ? "failed" : doc.status}
           </span>
-          <span className="lib-id">{doc.arxiv_id}</span>
+          <span className="lib-id">{doc.source === "pdf" ? "PDF" : doc.arxiv_id}</span>
           {doc.created_at && <span className="lib-time">{relativeTime(doc.created_at)}</span>}
         </div>
         {failed && doc.error && <p className="lib-error">{doc.error}</p>}

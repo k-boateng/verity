@@ -16,7 +16,10 @@ class Document(Base):
     __tablename__ = "documents"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Unique key: an arXiv id ("1706.03762") or a PDF key ("pdf-<sha>").
     arxiv_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    source: Mapped[str] = mapped_column(String(16), default="arxiv")  # arxiv | pdf
+    filename: Mapped[str] = mapped_column(Text, default="")  # original name, PDFs
     title: Mapped[str] = mapped_column(Text, default="")
     authors: Mapped[str] = mapped_column(Text, default="")
     # fetched -> parsed -> ready | failed

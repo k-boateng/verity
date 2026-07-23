@@ -1,6 +1,8 @@
 export interface DocumentSummary {
   id: number;
   arxiv_id: string;
+  source: "arxiv" | "pdf";
+  filename: string;
   title: string;
   authors: string;
   status: string;
@@ -72,6 +74,14 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ arxiv_id: arxivId }),
     }).then((r) => handle<DocumentSummary>(r)),
+
+  uploadPdf: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return fetch("/api/documents/pdf", { method: "POST", body: form }).then((r) =>
+      handle<DocumentSummary>(r),
+    );
+  },
 
   getDocument: (docId: string | number) =>
     fetch(`/api/documents/${docId}`).then((r) => handle<DocumentSummary>(r)),

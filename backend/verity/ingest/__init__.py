@@ -7,6 +7,6 @@ source and the anchor space; the LaTeX source supplies what the HTML
 alone can't (macro definitions, theorem statements, symbol candidates).
 """
 
-from .pipeline import IngestError, ingest
+from .pipeline import IngestError, ingest, ingest_pdf
 
-__all__ = ["ingest", "IngestError"]
+__all__ = ["ingest", "ingest_pdf", "IngestError"]

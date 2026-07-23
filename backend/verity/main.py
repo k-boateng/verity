@@ -2,13 +2,13 @@ import shutil
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
 from . import config, db, retrieval
-from .ingest import IngestError, ingest
+from .ingest import IngestError, ingest, ingest_pdf
 from .llm import get_provider
 from .llm import tasks as llm_tasks
 from .models import Chat, Document, Edge, Node, utcnow
@@ -38,6 +38,8 @@ def _doc_summary(doc: Document) -> dict:
     return {
         "id": doc.id,
         "arxiv_id": doc.arxiv_id,
+        "source": getattr(doc, "source", "arxiv") or "arxiv",
+        "filename": getattr(doc, "filename", "") or "",
         "title": doc.title,
         "authors": doc.authors,
         "status": doc.status,
@@ -51,6 +53,22 @@ def create_document(req: IngestRequest) -> dict:
     session = db.get_session()
     try:
         doc = ingest(session, req.arxiv_id)
+    except IngestError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    finally:
+        session.close()
+    return _doc_summary(doc)
+
+
+@app.post("/api/documents/pdf")
+async def upload_pdf(file: UploadFile = File(...)) -> dict:
+    name = file.filename or "document.pdf"
+    data = await file.read()
+    if data[:5] != b"%PDF-":
+        raise HTTPException(status_code=422, detail="that doesn't look like a PDF file")
+    session = db.get_session()
+    try:
+        doc = ingest_pdf(session, name, data)
     except IngestError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     finally:

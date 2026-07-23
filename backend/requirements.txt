@@ -8,4 +8,6 @@ lxml>=5.2
 python-dotenv>=1.0
 latex2mathml>=3.77
 google-genai>=1.0
+pymupdf>=1.24
+python-multipart>=0.0.9
 pytest>=8.0
