@@ -3,7 +3,7 @@ import hashlib
 from sqlalchemy.orm import Session
 
 from .. import config
-from ..models import Document, Edge, Node
+from ..models import Asset, Document, Edge, Node
 from . import arxiv, graph as graph_mod, html as html_mod, latex as latex_mod
 from . import pdf as pdf_mod
 
@@ -40,7 +40,8 @@ def ingest(session: Session, raw_id: str, force: bool = False) -> Document:
 
 
 def _run(session: Session, doc: Document) -> None:
-    safe_id = doc.arxiv_id.replace("/", "_")
+    # A temp dir only for this ingest — arxiv source is unpacked and parsed
+    # here, then discarded. Nothing served is read from disk.
     doc_dir = config.document_dir(doc.arxiv_id)
 
     fetched = arxiv.fetch(doc.arxiv_id, doc_dir)
@@ -59,21 +60,34 @@ def _run(session: Session, doc: Document) -> None:
             latex_info = latex_mod.parse(tex)
 
     byline = ", ".join(fetched.authors)
-    processed = html_mod.process(fetched.html, safe_id, byline=byline)
+    processed = html_mod.process(fetched.html, f"/api/assets/{doc.id}", byline=byline)
     doc.title = fetched.title or processed.title or doc.arxiv_id
     doc.authors = processed.authors
+    doc.html_content = processed.article_html
     doc.status = "parsed"
     session.commit()
 
+    assets: dict = {}
     for src in processed.image_srcs:
-        arxiv.fetch_asset(fetched.html_base_url, src, doc_dir / "assets" / src)
-
-    processed_path = doc_dir / "paper.html"
-    processed_path.write_text(processed.article_html, encoding="utf-8")
-    doc.html_path = str(processed_path)
+        got = arxiv.fetch_asset_bytes(fetched.html_base_url, src)
+        if got is not None:
+            assets[src] = got
+    _store_assets(session, doc, assets)
 
     graph = graph_mod.build(processed, latex_info)
     _store_graph(session, doc, graph)
+
+
+def _store_assets(session: Session, doc: Document, assets: dict) -> None:
+    """Persist image bytes in the DB, keyed by (document, path), so the reader
+    needs no local files. assets: {path: (bytes, content_type)}."""
+    session.query(Asset).filter_by(document_id=doc.id).delete()
+    session.flush()
+    for path, (data, content_type) in assets.items():
+        session.add(
+            Asset(document_id=doc.id, path=path, content_type=content_type, data=data)
+        )
+    session.flush()
 
 
 def _store_graph(session: Session, doc: Document, graph) -> None:
@@ -132,21 +146,15 @@ def ingest_pdf(session: Session, filename: str, pdf_bytes: bytes) -> Document:
         session.commit()
 
     try:
-        doc_dir = config.document_dir(key)
-        (doc_dir / "source.pdf").write_bytes(pdf_bytes)
-
+        assets: dict = {}
         processed = pdf_mod.extract(
-            pdf_bytes,
-            assets_dir=doc_dir / "assets",
-            asset_url_prefix=f"/api/assets/{key}",
+            pdf_bytes, asset_url_prefix=f"/api/assets/{doc.id}", assets=assets
         )
         doc.title = processed.title or filename or key
         doc.authors = processed.authors
+        doc.html_content = processed.article_html
 
-        html_path = doc_dir / "paper.html"
-        html_path.write_text(processed.article_html, encoding="utf-8")
-        doc.html_path = str(html_path)
-
+        _store_assets(session, doc, assets)
         graph = graph_mod.build(processed, None)
         _store_graph(session, doc, graph)
 

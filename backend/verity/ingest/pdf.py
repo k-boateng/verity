@@ -17,7 +17,6 @@ everything downstream (graph build, storage, the whole reader) is identical.
 import html as html_lib
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
 
 import fitz
 
@@ -73,10 +72,14 @@ def page_count(pdf_bytes: bytes) -> int:
 
 
 def extract(
-    pdf_bytes: bytes, assets_dir: Path | None = None, asset_url_prefix: str = ""
+    pdf_bytes: bytes, asset_url_prefix: str = "", assets: dict | None = None
 ) -> ProcessedHtml:
+    """Parse a PDF. Figures and rasterized crops are collected into `assets`
+    (a dict of filename -> (bytes, content_type)) rather than written to disk,
+    so the caller can persist them wherever it likes. Pass assets=None (tests)
+    to skip binary extraction."""
     with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-        elements = _collect_elements(doc, assets_dir, asset_url_prefix)
+        elements = _collect_elements(doc, assets, asset_url_prefix)
         meta_title = (doc.metadata or {}).get("title", "") or ""
 
     text_elements = [e for e in elements if e.kind == "text"]
@@ -104,7 +107,7 @@ def extract(
 # --- collection -----------------------------------------------------------
 
 def _collect_elements(
-    doc: fitz.Document, assets_dir: Path | None, asset_url_prefix: str
+    doc: fitz.Document, assets: dict | None, asset_url_prefix: str
 ) -> list[Element]:
     """Flatten the document to text, image, and table elements in reading order.
     A cheap two-column heuristic (left-half before right-half, per page) handles
@@ -114,11 +117,11 @@ def _collect_elements(
         page = doc.load_page(pno)
         width = page.rect.width
 
-        tables = _extract_tables(page, pno, assets_dir, asset_url_prefix)
+        tables = _extract_tables(page, pno, assets, asset_url_prefix)
         table_boxes = [box for _, box in tables]
         page_elements: list[Element] = [t for t, _ in tables]
 
-        images = _extract_images(doc, page, pno, assets_dir, asset_url_prefix)
+        images = _extract_images(doc, page, pno, assets, asset_url_prefix)
         page_elements.extend(images)
 
         for b in page.get_text("dict").get("blocks", []):
@@ -131,9 +134,9 @@ def _collect_elements(
                 continue
             # Display equations are glyph-soup as text — crop them from the page
             # as a crisp image instead, so they render correctly.
-            if assets_dir is not None and _is_display_equation(text, b["bbox"], width):
+            if assets is not None and _is_display_equation(text, b["bbox"], width):
                 src = _rasterize_region(
-                    page, b["bbox"], assets_dir, asset_url_prefix, f"eq-p{pno}-{round(b['bbox'][1])}"
+                    page, b["bbox"], assets, asset_url_prefix, f"eq-p{pno}-{round(b['bbox'][1])}"
                 )
                 if src:
                     page_elements.append(
@@ -169,18 +172,18 @@ def _collect_elements(
 
 
 def _rasterize_region(
-    page: fitz.Page, bbox, assets_dir: Path | None, asset_url_prefix: str, name: str
+    page: fitz.Page, bbox, assets: dict | None, asset_url_prefix: str, name: str
 ) -> str:
     """Render a region of the page to a crisp PNG (2x) — used for tables and
-    display equations that don't survive text extraction."""
-    if assets_dir is None:
+    display equations that don't survive text extraction. The bytes go into the
+    assets dict; the URL is returned."""
+    if assets is None:
         return ""
     try:
         rect = fitz.Rect(bbox) + (-3, -3, 3, 3)
         pix = page.get_pixmap(clip=rect, matrix=fitz.Matrix(2, 2))
-        assets_dir.mkdir(parents=True, exist_ok=True)
         filename = f"{name}.png"
-        (assets_dir / filename).write_bytes(pix.tobytes("png"))
+        assets[filename] = (pix.tobytes("png"), "image/png")
         return f"{asset_url_prefix}/{filename}"
     except Exception:
         return ""
@@ -217,7 +220,7 @@ def _looks_like_real_table(rows: list) -> bool:
 
 
 def _extract_tables(
-    page: fitz.Page, pno: int, assets_dir: Path | None, asset_url_prefix: str
+    page: fitz.Page, pno: int, assets: dict | None, asset_url_prefix: str
 ) -> list[tuple[Element, tuple]]:
     out: list[tuple[Element, tuple]] = []
     try:
@@ -235,7 +238,7 @@ def _extract_tables(
         if not _looks_like_real_table(rows):
             continue  # a text column mis-detected as a table — leave it as prose
         # A cropped image of the real table beats a mangled HTML reconstruction.
-        src = _rasterize_region(page, box, assets_dir, asset_url_prefix, f"tbl-p{pno}-{i}")
+        src = _rasterize_region(page, box, assets, asset_url_prefix, f"tbl-p{pno}-{i}")
         if src:
             element = Element(
                 kind="image", page=pno, y=box[1], x0=box[0], img_src=src, img_w=box[2] - box[0]
@@ -259,10 +262,10 @@ def _extract_images(
     doc: fitz.Document,
     page: fitz.Page,
     pno: int,
-    assets_dir: Path | None,
+    assets: dict | None,
     asset_url_prefix: str,
 ) -> list[Element]:
-    if assets_dir is None:
+    if assets is None:
         return []
     out: list[Element] = []
     seen: set[int] = set()
@@ -287,8 +290,7 @@ def _extract_images(
         if not data:
             continue
         filename = f"p{pno}-x{xref}.{ext}"
-        assets_dir.mkdir(parents=True, exist_ok=True)
-        (assets_dir / filename).write_bytes(data)
+        assets[filename] = (data, f"image/{ext}")
         y = rect.y0 if rect is not None else pno * 10000
         x0 = rect.x0 if rect is not None else 0.0
         out.append(

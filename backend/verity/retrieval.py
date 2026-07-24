@@ -6,7 +6,6 @@ finds nothing does resolution fall through to generation.
 
 import re
 from dataclasses import dataclass
-from pathlib import Path
 
 from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
@@ -64,18 +63,17 @@ def retrieve_selection(session: Session, doc: Document, selection: str) -> Retri
     return best
 
 
-def symbol_excerpts(html_path: str, label: str, limit: int = 4) -> list[str]:
+def symbol_excerpts(html: str, label: str, limit: int = 4) -> list[str]:
     """Prose paragraphs where a symbol actually appears, pulled from the stored
     rendering. This is the grounding context handed to the model so a symbol
     definition is based on how the paper uses it, not invented."""
-    path = Path(html_path) if html_path else None
-    if path is None or not path.exists():
+    if not html:
         return []
     target = normalize_math(label)
     if not target:
         return []
 
-    soup = BeautifulSoup(path.read_text(encoding="utf-8"), "lxml")
+    soup = BeautifulSoup(html, "lxml")
     seen: set[str] = set()
     excerpts: list[str] = []
     for math in soup.find_all("math"):
@@ -96,14 +94,13 @@ def symbol_excerpts(html_path: str, label: str, limit: int = 4) -> list[str]:
     return excerpts
 
 
-def section_text(html_path: str, anchor: str, limit: int = 6000) -> str:
+def section_text(html: str, anchor: str, limit: int = 6000) -> str:
     """The prose of one section, pulled from the stored rendering. This is the
     grounding source for a checkpoint — key points are drawn from here, never
     invented."""
-    path = Path(html_path) if html_path else None
-    if path is None or not path.exists():
+    if not html:
         return ""
-    soup = BeautifulSoup(path.read_text(encoding="utf-8"), "lxml")
+    soup = BeautifulSoup(html, "lxml")
     el = soup.find(id=anchor)
     if el is None:
         return ""

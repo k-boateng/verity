@@ -202,19 +202,17 @@ def inline_inputs(main_tex: Path, max_depth: int = 5) -> str:
     return load(main_tex, 0)
 
 
-def fetch_asset(base_url: str, rel_src: str, dest: Path) -> bool:
-    """Download one image/asset referenced by the HTML. Returns success.
-
-    urljoin resolves rel_src exactly the way a browser would against the
-    page URL, which is what the src attributes were written for."""
+def fetch_asset_bytes(base_url: str, rel_src: str) -> tuple[bytes, str] | None:
+    """Download one image/asset referenced by the HTML, returning its bytes and
+    content type (or None). urljoin resolves rel_src the way a browser would
+    against the page URL, which is what the src attributes were written for."""
     url = urljoin(base_url, rel_src)
     try:
         with httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=30.0) as client:
             resp = _throttled_get(client, url)
-        if resp.status_code == 200:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(resp.content)
-            return True
+        if resp.status_code == 200 and resp.content:
+            ctype = resp.headers.get("content-type", "").split(";")[0] or "image/png"
+            return resp.content, ctype
     except httpx.HTTPError:
         pass
-    return False
+    return None

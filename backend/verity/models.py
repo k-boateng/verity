@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, LargeBinary, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -25,12 +25,15 @@ class Document(Base):
     # fetched -> parsed -> ready | failed
     status: Mapped[str] = mapped_column(String(16), default="fetched")
     error: Mapped[str] = mapped_column(Text, default="")
-    html_path: Mapped[str] = mapped_column(Text, default="")
+    # The rendered reader HTML lives in the DB (not on disk) so the backend is
+    # stateless and survives restarts on ephemeral-disk hosts.
+    html_content: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     nodes: Mapped[list["Node"]] = relationship(back_populates="document", cascade="all, delete-orphan")
     edges: Mapped[list["Edge"]] = relationship(back_populates="document", cascade="all, delete-orphan")
     chats: Mapped[list["Chat"]] = relationship(back_populates="document", cascade="all, delete-orphan")
+    assets: Mapped[list["Asset"]] = relationship(back_populates="document", cascade="all, delete-orphan")
 
 
 class Node(Base):
@@ -88,3 +91,19 @@ class Chat(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     document: Mapped[Document] = relationship(back_populates="chats")
+
+
+class Asset(Base):
+    """A binary asset (figure, table/equation crop) referenced by the rendered
+    HTML. Stored in the DB, keyed by (document, path), so the reader needs no
+    local files — served at /api/assets/<document_id>/<path>."""
+
+    __tablename__ = "assets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"), index=True)
+    path: Mapped[str] = mapped_column(String(512), index=True)
+    content_type: Mapped[str] = mapped_column(String(64), default="image/png")
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+
+    document: Mapped[Document] = relationship(back_populates="assets")

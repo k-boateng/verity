@@ -1,4 +1,4 @@
-from verity.ingest import graph, html, latex
+﻿from verity.ingest import graph, html, latex
 
 SAMPLE_HTML = r"""
 <html><body><article class="ltx_document">
@@ -34,7 +34,7 @@ SAMPLE_HTML = r"""
 
 
 def test_process_builds_targets_and_occurrences():
-    processed = html.process(SAMPLE_HTML, "1234.5678")
+    processed = html.process(SAMPLE_HTML, "/api/assets/1234.5678")
     assert processed.title == "A Sample Paper"
     assert processed.authors == "Ada Lovelace"
 
@@ -58,21 +58,21 @@ def test_process_builds_targets_and_occurrences():
 
 
 def test_byline_replaces_author_block():
-    processed = html.process(SAMPLE_HTML, "1234.5678", byline="Ada Lovelace, Charles Babbage")
+    processed = html.process(SAMPLE_HTML, "/api/assets/1234.5678", byline="Ada Lovelace, Charles Babbage")
     assert processed.authors == "Ada Lovelace, Charles Babbage"
     assert "verity-byline" in processed.article_html
     assert 'class="ltx_authors"' not in processed.article_html
 
 
 def test_math_index_by_section():
-    processed = html.process(SAMPLE_HTML, "1234.5678")
+    processed = html.process(SAMPLE_HTML, "/api/assets/1234.5678")
     assert "S2" in processed.math_by_section
     # normalized: braces and whitespace removed
     assert "d_k" in processed.math_by_section["S2"]
 
 
 def test_process_stamps_and_sanitizes():
-    processed = html.process(SAMPLE_HTML, "1234.5678")
+    processed = html.process(SAMPLE_HTML, "/api/assets/1234.5678")
     assert 'data-verity="S2.E1"' in processed.article_html
     assert 'data-verity-kind="citation"' in processed.article_html
     assert "<script" not in processed.article_html
@@ -81,7 +81,7 @@ def test_process_stamps_and_sanitizes():
 
 
 def test_graph_merges_symbols_with_abstention():
-    processed = html.process(SAMPLE_HTML, "1234.5678")
+    processed = html.process(SAMPLE_HTML, "/api/assets/1234.5678")
     info = latex.LatexInfo(
         macros={"R": "\\mathbb{R}", "todo": "\\textcolor{red}{[[#1]]}"},
         symbols=[{"token": "d_k", "count": 5}],
@@ -103,7 +103,7 @@ def test_graph_merges_symbols_with_abstention():
     g2 = graph.build(processed, latex.LatexInfo(macros={"kq": "q"}))
     assert "q" not in {n["label"] for n in g2.nodes if n["kind"] == "symbol"}
 
-    # no fabricated definitions — every fresh symbol is unresolved with no excerpt
+    # no fabricated definitions â€” every fresh symbol is unresolved with no excerpt
     for node in symbols:
         assert node["excerpt"] == ""
         assert node["data"]["definition_status"] == "unresolved"
@@ -115,3 +115,4 @@ def test_graph_merges_symbols_with_abstention():
 
     edge_kinds = {e["kind"] for e in g.edges}
     assert edge_kinds == {"references", "cites"}
+

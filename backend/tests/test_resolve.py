@@ -186,17 +186,14 @@ def test_explain_equation(client, doc):
     assert "attention" in body["content"]
 
 
-def test_define_symbol_caches_result(client, doc, tmp_path):
-    # a stored rendering that mentions d_k in a paragraph
-    html = tmp_path / "paper.html"
-    html.write_text(
-        '<article><div class="ltx_p"><math alttext="d_k"><mi>d</mi></math> is the key '
-        "dimension used to scale the dot products.</div></article>",
-        encoding="utf-8",
-    )
+def test_define_symbol_caches_result(client, doc):
     session = db.get_session()
     d = session.get(Document, doc)
-    d.html_path = str(html)
+    # a stored rendering that mentions d_k in a paragraph
+    d.html_content = (
+        '<article><div class="ltx_p"><math alttext="d_k"><mi>d</mi></math> is the key '
+        "dimension used to scale the dot products.</div></article>"
+    )
     node = Node(
         document_id=doc, kind="symbol", label="d_k", excerpt="",
         data={"definition_status": "unresolved", "sections": ["S3"]},

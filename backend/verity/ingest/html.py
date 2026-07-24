@@ -61,7 +61,7 @@ _KIND_BY_CLASS = [
 ]
 
 
-def process(html: str, safe_id: str, byline: str = "") -> ProcessedHtml:
+def process(html: str, asset_prefix: str, byline: str = "") -> ProcessedHtml:
     soup = BeautifulSoup(html, "lxml")
     article = soup.find("article") or soup.find("body") or soup
 
@@ -123,7 +123,7 @@ def process(html: str, safe_id: str, byline: str = "") -> ProcessedHtml:
             if target is not None:
                 targets[anchor] = target
 
-    image_srcs = _rewrite_images(article, safe_id)
+    image_srcs = _rewrite_images(article, asset_prefix)
     math_by_section = _index_math(article)
 
     return ProcessedHtml(
@@ -317,13 +317,13 @@ def _section_label_for(element: Tag) -> str:
     return ""
 
 
-def _rewrite_images(article: Tag, safe_id: str) -> list[str]:
+def _rewrite_images(article: Tag, asset_prefix: str) -> list[str]:
     srcs: list[str] = []
     for img in article.find_all("img", src=True):
         src = img["src"]
         if src.startswith(("http://", "https://", "data:")):
             continue
         srcs.append(src)
-        img["src"] = f"/api/assets/{safe_id}/{src}"
+        img["src"] = f"{asset_prefix}/{src}"
         img["loading"] = "lazy"
     return srcs

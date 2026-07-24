@@ -1,17 +1,16 @@
 import shutil
 from contextlib import asynccontextmanager
-from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
 from . import config, db, retrieval
 from .ingest import IngestError, ingest, ingest_pdf
 from .llm import get_provider
 from .llm import tasks as llm_tasks
-from .models import Chat, Document, Edge, Node, utcnow
+from .models import Asset, Chat, Document, Edge, Node, utcnow
 
 
 @asynccontextmanager
@@ -123,12 +122,13 @@ def get_document_html(doc_id: int) -> str:
     session = db.get_session()
     try:
         doc = _get_doc(session, doc_id)
+        html = doc.html_content
+        status = doc.status
     finally:
         session.close()
-    path = Path(doc.html_path) if doc.html_path else None
-    if path is None or not path.exists():
-        raise HTTPException(status_code=409, detail=f"document not ready (status: {doc.status})")
-    return path.read_text(encoding="utf-8")
+    if not html:
+        raise HTTPException(status_code=409, detail=f"document not ready (status: {status})")
+    return html
 
 
 @app.get("/api/documents/{doc_id}/nodes")
@@ -160,13 +160,20 @@ def get_document_nodes(doc_id: int) -> dict:
         session.close()
 
 
-@app.get("/api/assets/{safe_id}/{asset_path:path}")
-def get_asset(safe_id: str, asset_path: str) -> FileResponse:
-    base = (config.DOCUMENTS_DIR / safe_id / "assets").resolve()
-    target = (base / asset_path).resolve()
-    if not str(target).startswith(str(base)) or not target.exists():
-        raise HTTPException(status_code=404, detail="asset not found")
-    return FileResponse(target)
+@app.get("/api/assets/{doc_id}/{asset_path:path}")
+def get_asset(doc_id: int, asset_path: str) -> Response:
+    session = db.get_session()
+    try:
+        asset = (
+            session.query(Asset)
+            .filter_by(document_id=doc_id, path=asset_path)
+            .one_or_none()
+        )
+        if asset is None:
+            raise HTTPException(status_code=404, detail="asset not found")
+        return Response(content=asset.data, media_type=asset.content_type)
+    finally:
+        session.close()
 
 
 # --- Resolution (Ask) -----------------------------------------------------
@@ -269,7 +276,7 @@ def define_symbol(doc_id: int, node_id: int) -> dict:
             return {"id": node.id, "excerpt": "", "data": {**data, "definition_status": "unresolved"}}
 
         doc = session.get(Document, doc_id)
-        excerpts = retrieval.symbol_excerpts(doc.html_path if doc else "", node.label)
+        excerpts = retrieval.symbol_excerpts(doc.html_content if doc else "", node.label)
 
         if not excerpts:
             data["definition_status"] = "undefined"
@@ -354,12 +361,12 @@ def checkpoint(doc_id: int, req: CheckpointRequest) -> dict:
     session = db.get_session()
     try:
         doc = _get_doc(session, doc_id)
-        html_path = doc.html_path
+        html = doc.html_content
         title = doc.title
     finally:
         session.close()
 
-    text = retrieval.section_text(html_path, req.section_anchor)
+    text = retrieval.section_text(html, req.section_anchor)
     if not text:
         raise HTTPException(status_code=422, detail="could not read that section")
 
