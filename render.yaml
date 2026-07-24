@@ -9,13 +9,8 @@ services:
     dockerfilePath: ./Dockerfile
     plan: free
     healthCheckPath: /api/config
-    # A persistent disk keeps ingested papers across restarts. Disks need a
-    # paid instance; on the free plan, drop this block and re-ingest after a
-    # restart (arXiv re-fetches; PDFs re-upload). See HOSTING.md.
-    disk:
-      name: verity-data
-      mountPath: /app/data
-      sizeGB: 1
+    # No persistent disk needed — rendered HTML and figures live in the DB, so
+    # the backend is stateless and survives free-tier cold starts.
     envVars:
       - key: GROQ_API_KEY # free key from console.groq.com
         sync: false

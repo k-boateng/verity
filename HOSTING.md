@@ -35,26 +35,17 @@ you mostly paste values.
 
 That's it — open the Vercel URL and paste an arXiv link or drop a PDF.
 
-## Known limitation: ephemeral storage on the free tier
+## Storage: no disk needed
 
-The backend writes each paper's rendered HTML and extracted figures to disk
-(`backend/data/`). Render's **free** instances have an *ephemeral* filesystem —
-those files vanish when the instance restarts or redeploys. The database rows
-(documents, chats) persist in Supabase, but a document's HTML would be gone, so
-the reader would 409 until it's re-ingested.
+The backend is stateless — a document's rendered HTML and its figures/table
+crops are stored **in the database** (not on local disk), served from there.
+So a free Render instance can cold-start all it wants and your library survives:
+nothing lives on the ephemeral filesystem. No persistent disk, no paid tier.
 
-Two clean fixes, in order of effort:
-
-1. **Persistent disk (easiest).** `render.yaml` already declares a 1 GB disk at
-   `/app/data`. Disks require a paid Render instance (~$7/mo). Keep the block and
-   everything just works across restarts.
-2. **Externalize storage (free, more work).** Store the rendered HTML in a DB
-   column and push figures to Supabase Storage, making the backend stateless.
-   This is the right long-term move and is noted as a follow-up in the code.
-
-On the free plan without a disk, arXiv papers re-ingest in seconds (just re-open
-them) and PDFs need re-uploading — fine for a personal instance, not for real
-users. Decide based on who's using it.
+The only thing this puts in the DB is image bytes. At personal scale that's a
+non-issue (Supabase's free 500 MB holds ~100 papers with figures, and deleting a
+paper reclaims its space). If it ever grows large, the clean next step is moving
+image bytes to Supabase Storage — but you're nowhere near needing that.
 
 ## Notes
 
